@@ -14,9 +14,10 @@
 ```
 
 Если путь второго репозитория другой, измените только
-`CISNET_BUILD_CONTEXT` в `.env`.
+`CISNET_BUILD_CONTEXT` в рабочем EnvironmentFile.
 
-Корневой `.env` уже содержит все несекретные параметры. Заполните пустые поля:
+Корневой `.env` — отслеживаемый безопасный шаблон. Не редактируйте его на
+сервере. Создайте защищённый рабочий EnvironmentFile и заполните пустые поля:
 
 - `WEBHOOK_SECRET`, `YOUGILE_API_KEY`;
 - `ACR_ACCESS_KEY`, `ACR_SECRET_KEY` и затем `ACR_EXECUTE=1`;
@@ -24,19 +25,26 @@
 - `VNC_PASSWORD`.
 
 ```bash
-chmod 600 .env
-docker compose config --quiet
+sudo install -o root -g root -m 600 \
+  /opt/music-verifier/.env /etc/music-verifier.env
+sudoedit /etc/music-verifier.env
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env config --quiet
 ```
 
 Не используйте обычный `docker compose config` в отчётах: после заполнения он
-может вывести секреты. Заполненный `.env` нельзя коммитить или помещать в image.
+может вывести секреты. `/etc/music-verifier.env` нельзя коммитить или помещать
+в image.
 
 ## Сборка и первый запуск
 
 ```bash
-docker compose build --pull
-docker compose up -d
-docker compose ps
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env build --pull
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env up -d
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env ps
 ```
 
 `init-data` первым создаёт named volume `music-verifier_music-data`. Первый
@@ -53,9 +61,14 @@ records. Старые WAV, результаты, сообщения и прог�
 
 ```bash
 curl --fail http://127.0.0.1:8080/health
-docker compose ps
-docker compose logs --tail=100 receiver worker cisnet-runner cisnet-browser
-docker compose exec receiver python docker/healthcheck.py database
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env ps
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env \
+  logs --tail=100 receiver worker cisnet-runner cisnet-browser
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env \
+  exec -T receiver python docker/healthcheck.py database
 ```
 
 noVNC доступен по `http://127.0.0.1:6080/vnc.html`. Для удалённого доступа
@@ -114,9 +127,11 @@ scope и явное разрешение на изменение внешнег�
 
 ```bash
 git pull --ff-only
-docker compose build --pull
-docker compose up -d --remove-orphans
-docker compose ps
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env build --pull
+sudo docker compose --project-directory /opt/music-verifier \
+  --env-file /etc/music-verifier.env up -d --remove-orphans
+yougile-status
 ```
 
 Не запускайте Compose одновременно со старым systemd deployment: два receiver
@@ -130,8 +145,9 @@ desktop-home. Остановка или пересоздание контейн�
 
 Для согласованного backup сначала требуется отдельное окно остановки всех
 writers. Архивируйте весь `music-data`, а не один `pipeline.sqlite3`; секретный
-`.env` храните отдельным защищённым архивом. Перед восстановлением проверяйте
-SHA-256, ownership, `PRAGMA quick_check` и foreign keys.
+`/etc/music-verifier.env` храните отдельным защищённым архивом. Перед
+восстановлением проверяйте SHA-256, ownership, `PRAGMA quick_check` и foreign
+keys.
 
 ## Ограничения текущей проверки
 

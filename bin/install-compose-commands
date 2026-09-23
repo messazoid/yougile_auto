@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 repo_root="${YOUGILE_REPO_ROOT:-/opt/music-verifier}"
 dispatcher="$repo_root/bin/yougile-compose"
-target_dir=/usr/local/bin
+target_dir="${YOUGILE_COMMAND_DIR:-/usr/local/bin}"
 commands=(
   yougile-start yougile-stop yougile-restart yougile-status
   yougile-logs yougile-httplogs yougile-cisnetlogs
