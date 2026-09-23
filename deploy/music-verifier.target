@@ -1,0 +1,7 @@
+[Unit]
+Description=Music verifier pipeline
+Requires=yougile-receiver.service music-verifier-worker.service
+After=network-online.target
+
+[Install]
+WantedBy=multi-user.target

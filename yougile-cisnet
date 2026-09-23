@@ -1,0 +1,82 @@
+#!/bin/bash
+cd /opt/music-verifier || exit 1
+
+started_browser=0
+
+stop_browser() {
+    if [ "$started_browser" -eq 1 ]; then
+        started_browser=0
+        systemctl stop cisnet-cdp-browser.service 2>/dev/null || true
+        systemctl stop cisnet-desktop.service 2>/dev/null || true
+    fi
+}
+
+start_browser() {
+    started_browser=1
+    systemctl start cisnet-desktop.service
+    systemd-run --unit=cisnet-cdp-browser --collect \
+        --property=User=cisbot \
+        --property=WorkingDirectory=/opt/cisnet-playwright \
+        --property=TimeoutStopSec=10s \
+        --setenv=DISPLAY=:99 \
+        --setenv=PLAYWRIGHT_BROWSERS_PATH=/var/lib/cisnet-playwright/.cache/ms-playwright \
+        /usr/bin/node /opt/cisnet-playwright/launch-cdp.js
+    attempt=0
+    while ! curl -fsS http://127.0.0.1:9223/json/version >/dev/null 2>&1; do
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge 100 ]; then
+            echo 'yougile-cisnet: CIS-Net browser did not start' >&2
+            stop_browser
+            exit 2
+        fi
+        sleep 0.2
+    done
+    started_browser=1
+}
+
+for argument in "$@"; do
+    if [ "$argument" = "--execute" ] || [ "$argument" = "--exe" ]; then
+        if [ "$(id -u)" -ne 0 ]; then
+            echo 'yougile-cisnet: --execute/--exe must be run as root to control the CIS-Net desktop' >&2
+            exit 2
+        fi
+        exec {cisnet_lock_fd}>/opt/music-verifier/data/cisnet/session.lock
+        if ! flock -n "$cisnet_lock_fd"; then
+            echo 'yougile-cisnet: another CIS-Net search is running' >&2
+            exit 75
+        fi
+        if systemctl is-active --quiet cisnet-cdp-browser.service || systemctl is-active --quiet cisnet-desktop.service; then
+            echo 'yougile-cisnet: CIS-Net desktop is already in use' >&2
+            exit 75
+        fi
+        trap 'stop_browser' EXIT INT TERM
+        if [ -z "${CISNET_EMAIL:-}" ] || [ -z "${CISNET_PASSWORD:-}" ]; then
+            if [ ! -r /opt/cisnet-playwright/config/.env ]; then
+                echo 'yougile-cisnet: CIS-Net credentials file is unavailable' >&2
+                exit 2
+            fi
+            set -a
+            source /opt/cisnet-playwright/config/.env
+            set +a
+        fi
+        if [ -z "${CISNET_EMAIL:-}" ] || [ -z "${CISNET_PASSWORD:-}" ]; then
+            echo 'yougile-cisnet: CIS-Net credentials are not configured' >&2
+            exit 2
+        fi
+        start_browser
+        break
+    fi
+done
+
+if [ "$(id -un)" = "yougile" ]; then
+    if [ "$started_browser" -eq 1 ]; then
+        /opt/music-verifier/venvs/receiver/bin/python /opt/music-verifier/src/cisnet_cli.py "$@"
+        exit $?
+    fi
+    exec /opt/music-verifier/venvs/receiver/bin/python /opt/music-verifier/src/cisnet_cli.py "$@"
+fi
+if [ "$started_browser" -eq 1 ]; then
+    runuser -u yougile --whitelist-environment=CISNET_EMAIL,CISNET_PASSWORD -- /opt/music-verifier/venvs/receiver/bin/python /opt/music-verifier/src/cisnet_cli.py "$@"
+    exit $?
+fi
+exec runuser -u yougile -- /opt/music-verifier/venvs/receiver/bin/python /opt/music-verifier/src/cisnet_cli.py "$@"

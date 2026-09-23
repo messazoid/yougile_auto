@@ -1,0 +1,133 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+BASE_DIR=/opt/music-verifier
+DATA_ROOT=/opt/music-verifier/data
+PYTHON=/opt/music-verifier/venvs/receiver/bin/python
+INITIALIZER=/opt/music-verifier/src/cisnet_automation.py
+
+usage() {
+    cat <<'EOF'
+Usage:
+  sudo yougile-reset-data                 Show what would be reset
+  sudo yougile-reset-data --execute       Reset data and leave services stopped
+  sudo yougile-reset-data --execute --start
+                                          Reset data and start the pipeline
+
+This permanently deletes only /opt/music-verifier/data contents. Project code,
+configuration, credentials and YouGile webhook subscriptions are not removed.
+EOF
+}
+
+execute=0
+start_after=0
+for argument in "$@"; do
+    case "$argument" in
+        --execute)
+            execute=1
+            ;;
+        --start)
+            start_after=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "yougile-reset-data: unknown argument: $argument" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [ "$start_after" -eq 1 ] && [ "$execute" -ne 1 ]; then
+    echo 'yougile-reset-data: --start requires --execute' >&2
+    exit 2
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo 'yougile-reset-data: run with sudo or as root' >&2
+    exit 2
+fi
+
+if [ "$(readlink -f "$BASE_DIR")" != "/opt/music-verifier" ] ||
+   [ "$(readlink -f "$DATA_ROOT")" != "/opt/music-verifier/data" ]; then
+    echo 'yougile-reset-data: refusing to use an unexpected project or data path' >&2
+    exit 2
+fi
+
+if [ ! -x "$PYTHON" ] || [ ! -f "$INITIALIZER" ]; then
+    echo 'yougile-reset-data: application initializer is unavailable' >&2
+    exit 2
+fi
+
+if [ "$execute" -ne 1 ]; then
+    usage
+    printf '\nPlan:\n'
+    printf '  1. Stop music-verifier, CIS-Net watcher and CIS-Net browser units.\n'
+    printf '  2. Permanently delete everything below %s.\n' "$DATA_ROOT"
+    printf '  3. Recreate required runtime directories.\n'
+    printf '  4. Create the current SQLite schema and CIS-Net baseline.\n'
+    printf '  5. Verify SQLite integrity and the baseline.\n'
+    printf '  6. Leave services stopped (add --start to start the pipeline).\n'
+    exit 0
+fi
+
+units=(
+    music-verifier.target
+    yougile-receiver.service
+    music-verifier-worker.service
+    music-verifier-cisnet.path
+    music-verifier-cisnet.timer
+    music-verifier-cisnet.service
+    cisnet-cdp-browser.service
+    cisnet-desktop.service
+)
+
+echo 'Stopping project services...'
+systemctl stop "${units[@]}" || true
+
+for unit in "${units[@]}"; do
+    if systemctl is-active --quiet "$unit"; then
+        echo "yougile-reset-data: unit is still active: $unit" >&2
+        exit 2
+    fi
+done
+
+echo "Deleting runtime data below $DATA_ROOT..."
+find "$DATA_ROOT" -xdev -mindepth 1 -delete
+
+install -d -m 0750 -o yougile -g yougile "$DATA_ROOT"
+for directory in incoming audio events queue recognition-runs aggregation cisnet; do
+    install -d -m 0750 -o yougile -g yougile "$DATA_ROOT/$directory"
+done
+
+echo 'Creating the current database schema and CIS-Net baseline...'
+umask 0077
+runuser -u yougile -- "$PYTHON" "$INITIALIZER" --initialize
+
+runuser -u yougile -- "$PYTHON" -c '
+from pathlib import Path
+import sqlite3
+
+path = Path("/opt/music-verifier/data/queue/pipeline.sqlite3")
+with sqlite3.connect(path) as db:
+    quick_check = db.execute("PRAGMA quick_check").fetchone()[0]
+    schema = db.execute("SELECT version FROM schema_info WHERE id=1").fetchone()
+    baseline = db.execute(
+        "SELECT max_existing_run_id FROM cisnet_baseline WHERE id=1"
+    ).fetchone()
+if quick_check != "ok" or not schema or not baseline:
+    raise SystemExit("fresh runtime verification failed")
+print(f"Fresh runtime ready: schema={schema[0]}, CIS-Net baseline={baseline[0]}, quick_check={quick_check}")
+'
+
+if [ "$start_after" -eq 1 ]; then
+    echo 'Starting the pipeline...'
+    systemctl reset-failed "${units[@]}" || true
+    systemctl start music-verifier.target music-verifier-cisnet.path music-verifier-cisnet.timer
+    echo 'Reset complete; the pipeline is running.'
+else
+    echo 'Reset complete; project services remain stopped.'
+fi

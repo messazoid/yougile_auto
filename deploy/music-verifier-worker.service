@@ -1,0 +1,24 @@
+[Unit]
+Description=Music verifier ACRCloud worker
+After=network-online.target yougile-receiver.service
+Wants=network-online.target
+PartOf=music-verifier.target
+
+[Service]
+Type=simple
+User=yougile
+Group=yougile
+WorkingDirectory=/opt/music-verifier
+EnvironmentFile=/etc/music-verifier-worker.env
+ExecStart=/opt/music-verifier/venvs/acr-sdk/bin/python /opt/music-verifier/src/recognition_worker.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/music-verifier/data/queue /opt/music-verifier/data/recognition-runs
+
+[Install]
+WantedBy=music-verifier.target

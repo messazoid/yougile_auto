@@ -1,0 +1,46 @@
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+!*.env.example
+/config/*.env
+/config/.env
+
+# Production state and local runtimes
+/data/
+/venvs/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Python caches and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local tooling and generated browser artifacts
+/.agents/
+/.codex/
+/.playwright-mcp/
+
+# Historical backups and scratch paths
+/backup/
+/backup-*/
+/tmp/
+/p/
+/opt/
+*.backup-*
+*.bak
+*.orig
+*.rej
+
+# Logs and screenshots
+*.log
+*.png
+*.jpg
+*.jpeg
+

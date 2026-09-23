@@ -1,0 +1,24 @@
+[Unit]
+Description=YouGile video webhook receiver
+After=network-online.target
+Wants=network-online.target
+PartOf=music-verifier.target
+
+[Service]
+Type=simple
+User=yougile
+Group=yougile
+WorkingDirectory=/opt/music-verifier
+EnvironmentFile=/etc/yougile-video.env
+ExecStart=/opt/music-verifier/venvs/receiver/bin/python -m uvicorn receiver:app --app-dir /opt/music-verifier/src --host 127.0.0.1 --port 8080 --no-access-log
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/music-verifier/data
+
+[Install]
+WantedBy=multi-user.target

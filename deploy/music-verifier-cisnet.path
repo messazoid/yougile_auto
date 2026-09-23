@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for new aggregation exports for CIS-Net
+
+[Path]
+PathModified=/opt/music-verifier/data/aggregation
+Unit=music-verifier-cisnet.service
+
+[Install]
+WantedBy=music-verifier.target
+

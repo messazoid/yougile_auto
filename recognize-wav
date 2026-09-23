@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/music-verifier/venvs/acr-sdk/bin/python /opt/music-verifier/src/recognize_wav.py "$@"
