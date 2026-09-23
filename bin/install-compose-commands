@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+repo_root="${YOUGILE_REPO_ROOT:-/opt/music-verifier}"
+dispatcher="$repo_root/bin/yougile-compose"
+target_dir=/usr/local/bin
+commands=(
+  yougile-start yougile-stop yougile-restart yougile-status
+  yougile-logs yougile-httplogs yougile-cisnetlogs
+  yougile-runs yougile-resolve yougile-cisnet yougile-env
+  yougile-reset-data recognize-wav
+)
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "Run as root: sudo $0" >&2
+  exit 2
+fi
+if [[ ! -f "$dispatcher" ]]; then
+  echo "Dispatcher not found: $dispatcher" >&2
+  exit 2
+fi
+
+chmod 0755 "$dispatcher"
+install -d -m 0755 "$target_dir"
+for command_name in "${commands[@]}"; do
+  target="$target_dir/$command_name"
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    echo "Refusing to replace existing file: $target" >&2
+    exit 1
+  fi
+  if [[ -L "$target" ]]; then
+    current="$(readlink "$target")"
+    if [[ "$current" != "$dispatcher" ]]; then
+      echo "Refusing to replace existing symlink: $target -> $current" >&2
+      exit 1
+    fi
+    continue
+  fi
+  ln -s "$dispatcher" "$target"
+done
+
+echo "Installed ${#commands[@]} Compose commands in $target_dir"

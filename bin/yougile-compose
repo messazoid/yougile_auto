@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+REPO_ROOT="${YOUGILE_REPO_ROOT:-/opt/music-verifier}"
+ENV_FILE="${YOUGILE_ENV_FILE:-/etc/music-verifier.env}"
+PROJECT_DIR="$REPO_ROOT"
+
+if [[ ! -f "$PROJECT_DIR/compose.yaml" ]]; then
+  echo "yougile-compose: compose.yaml not found under $PROJECT_DIR" >&2
+  exit 2
+fi
+if [[ ! -r "$ENV_FILE" ]]; then
+  echo "yougile-compose: env file is unavailable: $ENV_FILE" >&2
+  exit 2
+fi
+
+compose() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    docker compose --project-directory "$PROJECT_DIR" --env-file "$ENV_FILE" "$@"
+  else
+    sudo docker compose --project-directory "$PROJECT_DIR" --env-file "$ENV_FILE" "$@"
+  fi
+}
+
+command_name="$(basename "$0")"
+
+case "$command_name" in
+  yougile-start)
+    exec compose up -d
+    ;;
+  yougile-stop)
+    exec compose stop
+    ;;
+  yougile-restart)
+    exec compose up -d --force-recreate receiver worker cisnet-browser cisnet-runner
+    ;;
+  yougile-status)
+    exec compose ps -a
+    ;;
+  yougile-logs)
+    follow=1
+    for argument in "$@"; do
+      case "$argument" in
+        --once) follow=0 ;;
+        --follow) follow=1 ;;
+        *) echo "Usage: yougile-logs [--follow|--once]" >&2; exit 2 ;;
+      esac
+    done
+    if [[ "$follow" -eq 1 ]]; then
+      exec compose logs --tail=100 --follow receiver worker cisnet-runner cisnet-browser
+    fi
+    exec compose logs --tail=200 receiver worker cisnet-runner cisnet-browser
+    ;;
+  yougile-httplogs)
+    follow=1
+    for argument in "$@"; do
+      case "$argument" in
+        --once) follow=0 ;;
+        --follow) follow=1 ;;
+        *) echo "Usage: yougile-httplogs [--follow|--once]" >&2; exit 2 ;;
+      esac
+    done
+    if [[ "$follow" -eq 1 ]]; then
+      compose logs --tail=100 --follow receiver | grep --line-buffered '\[YOUGILE-HTTP\]'
+    else
+      compose logs --tail=200 receiver | grep '\[YOUGILE-HTTP\]'
+    fi
+    ;;
+  yougile-cisnetlogs)
+    follow=1
+    for argument in "$@"; do
+      case "$argument" in
+        --once) follow=0 ;;
+        --follow) follow=1 ;;
+        *) echo "Usage: yougile-cisnetlogs [--follow|--once]" >&2; exit 2 ;;
+      esac
+    done
+    if [[ "$follow" -eq 1 ]]; then
+      exec compose logs --tail=100 --follow cisnet-runner cisnet-browser
+    fi
+    exec compose logs --tail=200 cisnet-runner cisnet-browser
+    ;;
+  yougile-runs)
+    exec compose exec receiver python src/yougile_runs.py "$@"
+    ;;
+  yougile-resolve)
+    exec compose exec receiver python src/yougile_resolve.py "$@"
+    ;;
+  yougile-cisnet)
+    exec compose exec cisnet-runner python docker/cisnet-wrapper.py "$@"
+    ;;
+  recognize-wav)
+    if [[ "$#" -lt 1 ]]; then
+      echo "Usage: recognize-wav INPUT.wav [options]" >&2
+      exit 2
+    fi
+    input="$1"
+    shift
+    name="$(basename -- "$input")"
+    remote="/tmp/$name"
+    compose cp "$input" "worker:$remote"
+    exec compose exec worker python src/recognize_wav.py "$remote" "$@"
+    ;;
+  yougile-env)
+    exec sudoedit "$ENV_FILE"
+    ;;
+  yougile-reset-data)
+    if [[ "${1:-}" != "RESET MUSIC-VERIFIER DATA" ]]; then
+      echo "This removes the persistent music-data volume." >&2
+      echo "Usage: yougile-reset-data 'RESET MUSIC-VERIFIER DATA'" >&2
+      exit 2
+    fi
+    project_name="${COMPOSE_PROJECT_NAME:-music-verifier}"
+    compose stop
+    if [[ "$(id -u)" -eq 0 ]]; then
+      docker volume rm "${project_name}_music-data"
+    else
+      sudo docker volume rm "${project_name}_music-data"
+    fi
+    ;;
+  *)
+    echo "Unknown command: $command_name" >&2
+    echo "Install and call one of the yougile-* commands." >&2
+    exit 2
+    ;;
+esac

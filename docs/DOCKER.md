@@ -66,36 +66,49 @@ noVNC. Они не выполняют live-запросы в YouGile, ACRCloud �
 
 ## Операторские команды в Compose
 
-Старые `yougile-start`, `yougile-stop`, `yougile-restart`, `yougile-status` и
-log wrappers управляют только прежними systemd units. Их Compose-эквиваленты:
+После клонирования установите Compose-native wrappers одной командой:
 
 ```bash
-docker compose up -d
-docker compose stop
-docker compose restart
-docker compose ps
-docker compose logs --tail=100 --follow receiver worker cisnet-runner cisnet-browser
+sudo /opt/music-verifier/bin/install-compose-commands
+```
+
+После этого `yougile-start`, `yougile-stop`, `yougile-restart`, `yougile-status`,
+`yougile-logs`, `yougile-httplogs`, `yougile-cisnetlogs`, `yougile-runs`,
+`yougile-resolve`, `yougile-cisnet`, `yougile-env`, `yougile-reset-data` и
+`recognize-wav` доступны из любой рабочей директории. Они используют
+`/etc/music-verifier.env` и `/opt/music-verifier` автоматически.
+
+Основные команды:
+
+```bash
+yougile-start
+yougile-stop
+yougile-restart
+yougile-status
+yougile-logs --follow
+yougile-cisnetlogs --follow
 ```
 
 Остальные созданные инструменты находятся в image и запускаются так:
 
 ```bash
 # Интерактивный список и просмотр прогонов
-docker compose exec receiver python src/yougile_runs.py
+yougile-runs
 
-# Ручной WAV: сначала положить файл только во временный tmpfs контейнера
-docker compose cp /absolute/path/input.wav worker:/tmp/input.wav
-docker compose exec worker python src/recognize_wav.py /tmp/input.wav
+# Ручной WAV: файл копируется во временный tmpfs worker-контейнера
+recognize-wav /absolute/path/input.wav
 
 # Ручной CIS-Net поиск; session lock защищает от параллельного runner
-docker compose exec cisnet-runner python docker/cisnet-wrapper.py manual \
+yougile-cisnet manual \
   --title 'Название' --performer 'Исполнитель' --execute
 ```
 
-Команды `yougile_resolve.py`, `yougile_webhooks.py`, baseline и backfill
-сохранены в `src/`, но остаются специальными live/migration-инструментами: перед
-их запуском требуется отдельная проверка scope и явное разрешение на изменение
-внешнего состояния.
+`yougile-env` открывает `/etc/music-verifier.env`. `yougile-reset-data` требует
+точное подтверждение `RESET MUSIC-VERIFIER DATA` и удаляет persistent volume;
+не запускайте её в штатной эксплуатации. Команды `yougile_resolve.py`,
+`yougile_webhooks.py`, baseline и backfill остаются специальными
+live/migration-инструментами: перед их запуском требуется отдельная проверка
+scope и явное разрешение на изменение внешнего состояния.
 
 ## Обновление
 
