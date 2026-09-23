@@ -99,4 +99,3 @@ Native ACRCloud library подтверждена только для x86_64/glib
 - container-native supervisor и heartbeat CIS-Net;
 - heartbeat worker;
 - актуальная трактовка ACRCloud codes 3003/3015.
-
