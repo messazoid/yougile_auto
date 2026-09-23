@@ -36,8 +36,7 @@ Music Verifier:
 CIS-Net Playwright:
 
 - корневой `.env` как безопасный шаблон без рабочих секретов;
-- `launch-cdp.js`, `cisnet-desktop.sh`, `navigate-download.js`;
-- `run-navigate-download.sh`, `package.json`, `package-lock.json`;
+- `launch-cdp.js`, `cisnet-desktop.sh`, `package.json`, `package-lock.json`;
 - `PROJECT_STATUS.md`, `AGENTS.md`.
 
 ## Что не входит в Git и container build context
