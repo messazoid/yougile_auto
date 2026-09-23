@@ -43,6 +43,8 @@ VNC/noVNC и Node/Playwright находятся в связанном проек
 - FastAPI receiver для YouGile webhook и опционального poller;
 - durable deduplication событий, сообщений, источников и распознаваний;
 - загрузка разрешённых YouGile-файлов и публичных ссылок/папок Яндекс.Диска;
+- сохранение всех разных поддерживаемых ссылок из одного сообщения без потери
+  промежуточных источников;
 - подготовка mono PCM WAV через FFmpeg с проверкой FFprobe;
 - один последовательный ACRCloud worker с учётом попыток и окон;
 - сохранение raw response, кандидатов и scan SQLite для каждого recognition;
@@ -64,8 +66,9 @@ state: схема приложения 12, две завершённые recogni
 
 - перенос в Docker Compose описан ниже как целевая архитектура, но ещё не
   реализован;
-- offline/unit tests существуют, но их полный suite при последнем аудите не
-  запускался, чтобы исключить сеть и изменение production data;
+- полный suite из 217 тестов прошёл в отдельном network namespace без внешней
+  сети и production data; два native ACRCloud-теста дополнительно прошли в
+  SDK-окружении;
 - live-проверка CIS-Net после очистки не выполнялась; production adapter
   подтверждён статическими и unit-проверками.
 
@@ -75,8 +78,8 @@ state: схема приложения 12, две завершённые recogni
   entrypoint и container healthcheck;
 - host-systemd оркестрация CIS-Net ещё не заменена контейнерной;
 - нет отдельного worker/CIS-Net heartbeat, пригодного для healthcheck;
-- нет доступной Git-истории в текущих каталогах: `.git` пусты, поэтому commit,
-  branch, tracked/untracked/ignored status определить нельзя;
+- исходники и история хранятся в GitHub-репозиториях `messazoid/yougile_auto`
+  и `messazoid/cidnet_auto`;
 - Compose deployment и cutover не прошли staging/live validation.
 
 ## Карта проекта

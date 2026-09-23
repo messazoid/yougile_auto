@@ -260,14 +260,9 @@ def extract_urls(payload: dict) -> list[str]:
     return list(dict.fromkeys(urls))
 
 
-def last_yandex_public_url(payload: dict) -> str | None:
-    """Return the final Yandex Disk public URL in a chat message.
-
-    Chat messages also contain reference links (for example Shazam URLs).  Only
-    the last Yandex Disk link is an intake source; every other URL is metadata.
-    """
-    urls = [url for url in extract_urls(payload) if is_yandex_public_url(url)]
-    return urls[-1] if urls else None
+def yandex_public_urls(payload: dict) -> list[str]:
+    """Return every distinct Yandex Disk public URL in message order."""
+    return [url for url in extract_urls(payload) if is_yandex_public_url(url)]
 
 
 def parse_yougile_file_path(file_path: str) -> dict:
@@ -986,8 +981,7 @@ async def collect_message_sources(
         }
         for ref in extract_yougile_file_refs(message)
     ]
-    url = last_yandex_public_url(message)
-    if url:
+    for url in yandex_public_urls(message):
         expanded, _ = await expand_yandex(url)
         sources.extend(expanded)
     for candidate in extract_urls(message):

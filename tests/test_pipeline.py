@@ -421,7 +421,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.run_worker(), "idle")
         self.assertEqual(len(self.store.aggregation_runs_for_recognition(recognition["id"])), 1)
 
-    def test_duplicate_webhook_uses_only_last_yandex_link_once(self):
+    def test_duplicate_webhook_processes_all_yandex_links_once(self):
         payload = self.payload(text="https://disk.yandex.ru/d/one https://disk.yandex.ru/d/two")
         first_id, first_inserted = self.record(payload)
         second_id, second_inserted = self.record(payload)
@@ -431,10 +431,10 @@ class PipelineTests(unittest.TestCase):
         self.expand()
         with self.store.connect() as db:
             self.assertEqual(db.execute("SELECT delivery_count FROM webhook_events").fetchone()[0], 2)
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM source_jobs").fetchone()[0], 1)
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM message_sources").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM source_jobs").fetchone()[0], 2)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM message_sources").fetchone()[0], 2)
 
-    def test_collect_message_sources_ignores_non_yandex_urls_and_keeps_last_yandex(self):
+    def test_collect_message_sources_ignores_metadata_and_keeps_all_yandex_links(self):
         calls = []
 
         async def expand(url):
@@ -449,8 +449,14 @@ class PipelineTests(unittest.TestCase):
             )},
             "task", "message", expand,
         ))
-        self.assertEqual(calls, ["https://disk.yandex.ru/d/last"])
-        self.assertEqual(sources, [{"kind": "yandex_disk", "url": "https://disk.yandex.ru/d/last"}])
+        self.assertEqual(calls, [
+            "https://disk.yandex.ru/d/first",
+            "https://disk.yandex.ru/d/last",
+        ])
+        self.assertEqual(sources, [
+            {"kind": "yandex_disk", "url": "https://disk.yandex.ru/d/first"},
+            {"kind": "yandex_disk", "url": "https://disk.yandex.ru/d/last"},
+        ])
 
     def test_forced_webhook_queues_same_link_as_separate_replay(self):
         url = "https://disk.yandex.ru/d/replay-source"
