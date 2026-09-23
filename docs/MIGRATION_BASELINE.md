@@ -28,12 +28,14 @@ YouGile Music Verifier вместе с CIS-Net Playwright.
 Music Verifier:
 
 - `src/`, `scripts/`, корневые операторские wrappers;
+- корневой `.env` как безопасный шаблон без рабочих секретов;
 - `tests/` и `offline/` для CI и проверки, но не для final image;
 - `config/*requirements*`, `config/packages/` и `config/*.env.example`;
 - `deploy/`, `docs/`, `README.md`, `AGENTS.md`.
 
 CIS-Net Playwright:
 
+- корневой `.env` как безопасный шаблон без рабочих секретов;
 - `launch-cdp.js`, `cisnet-desktop.sh`, `navigate-download.js`;
 - `run-navigate-download.sh`, `package.json`, `package-lock.json`;
 - `PROJECT_STATUS.md`, `AGENTS.md`.
@@ -41,7 +43,7 @@ CIS-Net Playwright:
 ## Что не входит в Git и container build context
 
 - production `data/` и SQLite;
-- secret-bearing `.env`;
+- secret-bearing runtime `.env` (`config/*.env` и `config/.env`);
 - Python venv, `node_modules` и browser cache/profile;
 - `__pycache__`, test caches, Playwright diagnostics;
 - backup-каталоги, временные файлы, логи и screenshots.
