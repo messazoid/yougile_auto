@@ -18,7 +18,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/music-verifier/data/queue /opt/music-verifier/data/recognition-runs
+ReadWritePaths=/opt/music-verifier/data/queue /opt/music-verifier/data/recognition-runs /opt/music-verifier/data/aggregation
 
 [Install]
 WantedBy=music-verifier.target

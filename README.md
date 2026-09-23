@@ -219,16 +219,12 @@ CIS-Net/Playwright:
 - `CISNET_EMAIL`
 - `CISNET_PASSWORD`
 - `CISNET_CDP_ENDPOINT`
-- `CISNET_OBSERVE_MS` (старый diagnostic script)
 - `PLAYWRIGHT_BROWSERS_PATH`
 - `DISPLAY`
 - `HOME`
 
 `CISNET_ENV_LOADED` — внутренний marker wrapper, не пользовательская настройка.
-`YOUGILE_REPROCESS_ON_REENTRY` есть в старом env-шаблоне, но текущий код её не
-читает. `YOUGILE_TRIGGER_COLUMN_IDS` печатается старым режимом resolver, но
-receiver использует `YOUGILE_ALLOWED_COLUMN_IDS`; не копируйте первое имя в
-production config без исправления контракта.
+Resolver и receiver используют единое имя `YOUGILE_ALLOWED_COLUMN_IDS`.
 
 Для будущего Compose несекретные параметры допустимо передавать через
 root-owned `env_file`. Credentials следует монтировать как Docker/Compose
@@ -373,11 +369,10 @@ metadata. Текущая реализация `list/show` открывает SQL
 
 - code `1001` — допустимый API no-match, не ошибка транспорта;
 - HTTP 429 и 5xx ограниченно retryable и должны учитывать backoff;
-- текущий код считает ACR code `3003` retryable до `ACR_MAX_RETRIES`, затем
-  останавливает recognition и разрешает только явное продолжение;
-- operational meaning `3003`/`3015` необходимо подтвердить по действующему
-  контракту ACRCloud до контейнеризации: текущий код и прежние operational
-  ожидания расходятся, а отдельной обработки `3015` нет;
+- ACR code `3003` означает исчерпание количества запросов: автоматического
+  retry нет, продолжение допускается явно после восстановления лимита;
+- ACR code `3015` означает превышение QPS и обрабатывается ограниченным retry с
+  backoff;
 - один ACRCloud candidate или `complete_candidates` не является verified result.
 
 ### Правила YouGile

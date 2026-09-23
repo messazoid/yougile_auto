@@ -10,5 +10,6 @@ WorkingDirectory=/opt/music-verifier
 ExecStart=/opt/music-verifier/venvs/receiver/bin/python /opt/music-verifier/src/cisnet_automation.py
 TimeoutStartSec=infinity
 UMask=0077
+PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/opt/music-verifier/data/cisnet /opt/music-verifier/data/queue

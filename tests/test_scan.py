@@ -142,7 +142,10 @@ class ScannerTests(unittest.TestCase):
 
     def test_quota_error_stops_without_auto_retry(self):
         with self.assertRaises(app.ScanStop):
-            self.run_scan(lambda *args: (200, b'{"status":{"code":3003}}'))
+            self.run_scan(
+                lambda *args: (200, b'{"status":{"code":3003}}'),
+                max_retries=2,
+            )
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0], 1)
         with self.assertRaises(app.ScanStop):
             self.run_scan()
@@ -154,7 +157,7 @@ class ScannerTests(unittest.TestCase):
         fixtures = [
             (429, b'{"status":{"code":1001}}'),
             (503, b'{"status":{"code":1001}}'),
-            (200, b'{"status":{"code":3003}}'),
+            (200, b'{"status":{"code":3015}}'),
         ]
         for first_response in fixtures:
             with self.subTest(first_response=first_response):

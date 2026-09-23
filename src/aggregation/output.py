@@ -12,9 +12,9 @@ from .family import FamilyOccurrence, RecordingRelation, TrackFamily
 from .features import AppearanceFeatureVector, FeatureExtractionResult, SourceFeatureContext
 from .identity import RecordingIdentity
 from .models import RawProvenancePointer, RecognitionWindowStatus
-from .secondary import FamilyConflict, SecondaryEvidence, SecondaryEvidenceKind
+from .secondary import FamilyConflict, SecondaryEvidence
 from .temporal import ExactRecordingOccurrence, TemporalGap
-from .transitions import AppearanceSplit, DirectedTransition, FamilyAppearance, TransitionState
+from .transitions import AppearanceSplit, DirectedTransition, TransitionState
 
 
 AGGREGATED_RESULT_CONTRACT_VERSION = "aggregated-result/v2"

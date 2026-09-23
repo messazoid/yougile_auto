@@ -275,7 +275,10 @@ def process_recognition(store: PipelineStore, claimed: dict, cfg: WorkerConfig,
                     latest_error = db.execute(
                         "SELECT acr_code FROM attempts WHERE state='error' ORDER BY id DESC LIMIT 1"
                     ).fetchone()
-                    limited = bool(latest_error and latest_error[0] == 3003)
+                    limited = bool(
+                        latest_error
+                        and latest_error[0] == scan.ACR_REQUEST_COUNT_LIMIT_CODE
+                    )
                 store.complete_recognition(
                     recognition_id, claimed["claim_token"], state, summary, error
                 )
@@ -285,7 +288,7 @@ def process_recognition(store: PipelineStore, claimed: dict, cfg: WorkerConfig,
                         recognition_id,
                         "acr_limit",
                         f"3003-{summary.get('attempts', 0)}",
-                        "Исчерпае лимит ACRCloud",
+                        "Исчерпан лимит ACRCloud",
                     )
                 if state in aggregation_runner.SUCCESSFUL_RECOGNITION_STATES:
                     schedule_aggregation(store, recognition_id)

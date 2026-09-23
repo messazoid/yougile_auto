@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 import json
 import re
 import subprocess
-import sys
 
 
 UNITS = (

@@ -70,6 +70,14 @@ class PipelineTests(unittest.TestCase):
             },
         }
 
+    def test_webhook_secret_must_be_explicitly_configured(self):
+        for value in ("", "   ", "change-me-before-start", "replace-with-a-long-random-secret"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                RuntimeError, "WEBHOOK_SECRET must be explicitly configured"
+            ):
+                receiver.validate_webhook_secret(value)
+        self.assertEqual(receiver.validate_webhook_secret(" fixture-secret "), "fixture-secret")
+
     def record(self, payload):
         return self.store.record_webhook(
             payload,
@@ -256,44 +264,6 @@ class PipelineTests(unittest.TestCase):
              patch.object(receiver, "YOUGILE_ALLOWED_CHAT_IDS", set()):
             self.assertTrue(asyncio.run(receiver.webhook_task_in_scope("chat-1", get_json)))
         self.assertEqual(calls, [("/tasks/chat-1", "scope_task")])
-
-    def test_move_into_allowed_column_rearms_by_business_rule(self):
-        payload = self.payload(message="move-disabled", text="-")
-        payload["payload"]["properties"] = {
-            "move": True,
-            "fromSystem": True,
-            "taskId": "chat-1",
-            "from": "outside",
-            "to": "allowed-column",
-        }
-        self.record(payload)
-
-        async def scope(force=False):
-            del force
-            return {"chat-1"}, {"chat-1"}
-
-        async def no_network(value):
-            return value
-
-        async def no_sources(message, task_id, message_id):
-            return []
-
-        polls = []
-
-        async def poll(*args):
-            polls.append(args[2:])
-            return receiver.PollResult(0, messages_read=0, messages_skipped=0, messages_new=0)
-
-        with patch.object(receiver, "YOUGILE_ALLOWED_COLUMN_IDS", {"allowed-column"}), \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertTrue(asyncio.run(receiver.process_one_webhook(
-                self.store, no_network, scope, no_sources, poll
-            )))
-        self.assertEqual(len(polls), 1)
-        self.assertNotEqual(
-            self.store.scope_run_prep_hash("chat-1", "chat-1", receiver.PREP_CONFIG_HASH),
-            receiver.PREP_CONFIG_HASH,
-        )
 
     def test_pipeline_notification_does_not_rearm_or_poll_chat(self):
         payload = self.payload(
@@ -1942,11 +1912,11 @@ class PipelineTests(unittest.TestCase):
             3,
         )
 
-    def test_worker_retries_429_and_acr_3003_then_completes(self):
+    def test_worker_retries_429_and_acr_3015_then_completes(self):
         self.seed_ready_audio()
         responses = [
             (429, b'{"status":{"code":1001}}'),
-            (200, b'{"status":{"code":3003}}'),
+            (200, b'{"status":{"code":3015}}'),
             (200, b'{"status":{"code":1001}}'),
         ]
 
@@ -1980,7 +1950,7 @@ class PipelineTests(unittest.TestCase):
             return 200, b'{"status":{"code":3003}}'
 
         self.assertEqual(self.run_worker(transport=exhausted), "api_error")
-        self.assertEqual(len(exhausted_calls), 3)
+        self.assertEqual(len(exhausted_calls), 1)
         before = self.store.recognition(1)
         self.assertEqual(self.store.resume_limited_recognitions("chat-1", "chat-1"), [1])
         resumed = self.store.recognition(1)

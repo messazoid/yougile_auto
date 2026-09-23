@@ -39,6 +39,16 @@ def env_flag(name: str, default: bool = False) -> bool:
     raise ValueError(f"{name} must be true or false")
 
 
+def validate_webhook_secret(value: str) -> str:
+    secret = value.strip()
+    if not secret or secret in {
+        "change-me-before-start",
+        "replace-with-a-long-random-secret",
+    }:
+        raise RuntimeError("WEBHOOK_SECRET must be explicitly configured")
+    return secret
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 INCOMING_DIR = DATA_DIR / "incoming"
@@ -56,7 +66,7 @@ WAV_PROGRESS_INTERVAL_SECONDS = 5
 SOURCE_LEASE_SECONDS = 900
 SOURCE_LEASE_HEARTBEAT_SECONDS = 60
 AUDIO_RETRY_DELAYS_SECONDS = (30, 120, 300)
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "change-me-before-start")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "").strip()
 YOUGILE_API_KEY = os.getenv("YOUGILE_API_KEY", "")
 YOUGILE_API_BASE = os.getenv("YOUGILE_API_BASE", "https://yougile.com/api-v2").rstrip("/")
 YOUGILE_POLL_TASK_ID = os.getenv("YOUGILE_POLL_TASK_ID", "")
@@ -2336,6 +2346,7 @@ def write_latest_event(payload: dict) -> None:
 
 @app.on_event("startup")
 async def startup():
+    validate_webhook_secret(WEBHOOK_SECRET)
     for directory in (INCOMING_DIR, AUDIO_DIR, EVENTS_DIR, QUEUE_DIR):
         directory.mkdir(parents=True, exist_ok=True, mode=0o750)
     await asyncio.to_thread(STORE.initialize)

@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +71,19 @@ class YougileRunsTests(unittest.TestCase):
         self.assertIn("source.mp4 (2.0 KiB)", text)
         self.assertIn(f"{self.audio} (3.0 KiB)", text)
         self.assertTrue(self.audio.exists())
+
+    def test_read_connection_is_query_only(self):
+        with self.console.connect_readonly() as db:
+            self.assertEqual(db.execute("PRAGMA query_only").fetchone()[0], 1)
+            with self.assertRaises(sqlite3.OperationalError):
+                db.execute("CREATE TABLE must_not_exist (id INTEGER)")
+
+    def test_read_connection_does_not_create_a_missing_database(self):
+        missing = self.root / "missing" / "pipeline.sqlite3"
+        console = RunConsole(missing)
+        with self.assertRaises(sqlite3.OperationalError):
+            console.runs()
+        self.assertFalse(missing.exists())
 
     def test_list_columns_align_with_the_header(self):
         output = io.StringIO()

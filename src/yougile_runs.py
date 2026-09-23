@@ -229,13 +229,14 @@ class RunConsole:
         self.trash_root = self.data_root / ".trash"
         self.store = PipelineStore(self.database)
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database)
+    def connect_readonly(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(f"{self.database.as_uri()}?mode=ro", uri=True)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only=ON")
         return connection
 
     def runs(self) -> list[dict]:
-        with self.connect() as db:
+        with self.connect_readonly() as db:
             rows = db.execute(
                 """
                 SELECT s.id AS source_job_id,s.source_filename,s.source_size,s.source_kind,s.stage,s.error_type,
@@ -252,7 +253,7 @@ class RunConsole:
         return [dict(row) for row in rows]
 
     def detail(self, source_id: int) -> dict:
-        with self.connect() as db:
+        with self.connect_readonly() as db:
             source = db.execute("SELECT * FROM source_jobs WHERE id=?", (source_id,)).fetchone()
             if not source:
                 raise RunConsoleError(f"Source job S{source_id} does not exist")
@@ -350,7 +351,7 @@ class RunConsole:
             raise RunConsoleError("No matching on-disk artifacts remain to archive")
         moved: list[tuple[Path, Path]] = []
         try:
-            with self.connect() as db:
+            with self.store.connect() as db:
                 db.execute("BEGIN IMMEDIATE")
                 self._assert_deletion_safe(db, detail, mode)
                 for original, destination in plan:

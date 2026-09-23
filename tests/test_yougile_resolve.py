@@ -97,7 +97,7 @@ class YouGileResolveTests(unittest.TestCase):
             True, True, True, True, True,
         )
         line, warnings = resolve.format_columns_env([base, base, other])
-        self.assertEqual(line, f"YOUGILE_TRIGGER_COLUMN_IDS={COLUMN},{OTHER}")
+        self.assertEqual(line, f"YOUGILE_ALLOWED_COLUMN_IDS={COLUMN},{OTHER}")
         self.assertEqual(len(warnings), 1)
         self.assertIn("1 и 2", warnings[0])
 
@@ -166,7 +166,7 @@ class YouGileResolveTests(unittest.TestCase):
                 code = resolve.main(["--columns-env", f"https://yougile.com/task/{TASK}",
                                      f"https://yougile.com/task/{TASK}"])
             self.assertEqual(code, 0)
-            self.assertEqual(stdout.getvalue(), f"YOUGILE_TRIGGER_COLUMN_IDS={COLUMN}\n")
+            self.assertEqual(stdout.getvalue(), f"YOUGILE_ALLOWED_COLUMN_IDS={COLUMN}\n")
             self.assertIn("предупреждение", stderr.getvalue())
 
     def test_interactive_columns_paginates_and_selects_three_unique_columns(self):
@@ -243,7 +243,7 @@ class YouGileResolveTests(unittest.TestCase):
         self.assertIn(f"2 | Монтаж | {COLUMN_TWO} | 0", transcript)
         self.assertNotIn("PRIVATE", transcript)
         self.assertIn(
-            f"YOUGILE_TRIGGER_COLUMN_IDS={COLUMN},{COLUMN_TWO},{COLUMN_THREE}",
+            f"YOUGILE_ALLOWED_COLUMN_IDS={COLUMN},{COLUMN_TWO},{COLUMN_THREE}",
             transcript,
         )
         self.assertEqual(saved, [[COLUMN, COLUMN_TWO, COLUMN_THREE]])
@@ -298,7 +298,7 @@ class YouGileResolveTests(unittest.TestCase):
         ))
         self.assertEqual(code, 0)
         self.assertIn("Выбор отменён", output.getvalue())
-        self.assertNotIn("YOUGILE_TRIGGER_COLUMN_IDS=", output.getvalue())
+        self.assertNotIn("YOUGILE_ALLOWED_COLUMN_IDS=", output.getvalue())
 
     def test_columns_mode_accepts_no_links(self):
         args = resolve.build_parser().parse_args(["--columns"])

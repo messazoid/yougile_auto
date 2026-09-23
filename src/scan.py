@@ -46,7 +46,9 @@ SDK_VERSION = "1.0.12"
 MIN_LOCAL_SECONDS = 1  # Conservative local policy, NOT a claimed SDK/API minimum.
 FINGERPRINT_OPTIONS = {"filter_energy_min": 0, "silence_energy_threshold": 100,
                        "silence_rate_threshold": 1}
-RETRYABLE_ACR_CODES = {3003}
+ACR_REQUEST_COUNT_LIMIT_CODE = 3003
+ACR_QPS_LIMIT_CODE = 3015
+RETRYABLE_ACR_CODES = {ACR_QPS_LIMIT_CODE}
 
 
 class ScanStop(Exception):

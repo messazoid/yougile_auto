@@ -101,5 +101,4 @@ Native ACRCloud library подтверждена только для x86_64/glib
 - способ инъекции Docker secrets;
 - backup retention и rollback window;
 - container-native supervisor и heartbeat CIS-Net;
-- heartbeat worker;
-- актуальная трактовка ACRCloud codes 3003/3015.
+- heartbeat worker.

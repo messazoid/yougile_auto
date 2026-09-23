@@ -570,7 +570,7 @@ def _show_selection(selected: list[ColumnChoice], output: TextIO) -> None:
             file=output,
         )
     print(
-        "YOUGILE_TRIGGER_COLUMN_IDS=" + ",".join(column.column_id for column in selected),
+        "YOUGILE_ALLOWED_COLUMN_IDS=" + ",".join(column.column_id for column in selected),
         file=output,
     )
 
@@ -763,7 +763,7 @@ def format_columns_env(results: list[ResolvedTask]) -> tuple[str, list[str]]:
         else:
             first_link[result.column_id] = index
             column_ids.append(result.column_id)
-    return "YOUGILE_TRIGGER_COLUMN_IDS=" + ",".join(column_ids), warnings
+    return "YOUGILE_ALLOWED_COLUMN_IDS=" + ",".join(column_ids), warnings
 
 
 def build_parser() -> argparse.ArgumentParser:
