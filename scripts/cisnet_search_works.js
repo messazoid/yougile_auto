@@ -6,7 +6,9 @@
  */
 
 const fs = require('fs');
-const { chromium } = require('/opt/cisnet-playwright/node_modules/playwright');
+const playwrightModule = process.env.CISNET_PLAYWRIGHT_MODULE
+  || '/opt/cisnet-playwright/node_modules/playwright';
+const { chromium } = require(playwrightModule);
 
 const CDP_ENDPOINT = process.env.CISNET_CDP_ENDPOINT || 'http://127.0.0.1:9223';
 const NO_RESULTS = 'No results were found for this request.';

@@ -74,9 +74,10 @@ def safe_playwright_log_lines(stderr: str | None) -> list[str]:
 
 def _run_adapter_streaming(command: list[str]) -> subprocess.CompletedProcess:
     """Run the browser adapter while forwarding only safe trace lines live."""
+    adapter_cwd = os.environ.get("CISNET_ADAPTER_CWD", "/opt/cisnet-playwright")
     process = subprocess.Popen(
         command,
-        cwd="/opt/cisnet-playwright",
+        cwd=adapter_cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

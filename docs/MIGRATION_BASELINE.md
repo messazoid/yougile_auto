@@ -93,12 +93,11 @@ CIS-Net artifacts образуют единое состояние.
 Native ACRCloud library подтверждена только для x86_64/glibc. Целевую
 архитектуру сервера нужно проверить до сборки image.
 
-## Открытые решения перед контейнеризацией
+## Открытые решения перед staging и cutover
 
 - GitHub SSH-авторизация, branch protection и правила release tags;
 - TLS/reverse proxy для webhook;
 - UID/GID пользователей на новом сервере;
-- способ инъекции Docker secrets;
 - backup retention и rollback window;
-- container-native supervisor и heartbeat CIS-Net;
-- heartbeat worker.
+- staging host с Docker Engine/Compose;
+- worker progress heartbeat для длительного scan.

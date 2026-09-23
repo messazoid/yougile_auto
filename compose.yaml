@@ -1,0 +1,203 @@
+name: music-verifier
+
+x-music-build: &music-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    APP_UID: ${APP_UID:-10001}
+    APP_GID: ${APP_GID:-10001}
+    PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
+    NODE_IMAGE: ${NODE_IMAGE:-node:24-bookworm-slim}
+
+x-music-common: &music-common
+  image: ${MUSIC_IMAGE:-music-verifier:local}
+  build:
+    <<: *music-build
+    target: music-runtime
+  init: true
+  user: "${APP_UID:-10001}:${APP_GID:-10001}"
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  volumes:
+    - music-data:/opt/music-verifier/data
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+
+services:
+  init-data:
+    image: ${MUSIC_IMAGE:-music-verifier:local}
+    build:
+      <<: *music-build
+      target: music-runtime
+    user: "0:0"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - music-data:/opt/music-verifier/data
+    environment:
+      APP_UID: ${APP_UID:-10001}
+      APP_GID: ${APP_GID:-10001}
+    command: ["python", "docker/init_data.py"]
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+
+  receiver:
+    <<: *music-common
+    command:
+      - python
+      - -m
+      - uvicorn
+      - receiver:app
+      - --app-dir
+      - /opt/music-verifier/src
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --no-access-log
+    environment:
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      YOUGILE_API_BASE: ${YOUGILE_API_BASE:-https://yougile.com/api-v2}
+      YOUGILE_API_KEY: ${YOUGILE_API_KEY:-}
+      YOUGILE_ALLOWED_BOARD_IDS: ${YOUGILE_ALLOWED_BOARD_IDS:-}
+      YOUGILE_ALLOWED_COLUMN_IDS: ${YOUGILE_ALLOWED_COLUMN_IDS:-}
+      YOUGILE_ALLOWED_TASK_IDS: ${YOUGILE_ALLOWED_TASK_IDS:-}
+      YOUGILE_ALLOWED_CHAT_IDS: ${YOUGILE_ALLOWED_CHAT_IDS:-}
+      YOUGILE_COMPANY_ID: ${YOUGILE_COMPANY_ID:-}
+      YOUGILE_POLL_ENABLED: ${YOUGILE_POLL_ENABLED:-false}
+      YOUGILE_POLL_TASK_ID: ${YOUGILE_POLL_TASK_ID:-}
+      YOUGILE_POLL_CHAT_ID: ${YOUGILE_POLL_CHAT_ID:-}
+      YOUGILE_POLL_INTERVAL_SECONDS: ${YOUGILE_POLL_INTERVAL_SECONDS:-60}
+      YOUGILE_POLL_INITIAL_LIMIT: ${YOUGILE_POLL_INITIAL_LIMIT:-20}
+      YOUGILE_POLL_MAX_CHATS_PER_CYCLE: ${YOUGILE_POLL_MAX_CHATS_PER_CYCLE:-35}
+      YOUGILE_MAX_REQUESTS_PER_MINUTE: ${YOUGILE_MAX_REQUESTS_PER_MINUTE:-40}
+      YOUGILE_SCOPE_REFRESH_SECONDS: ${YOUGILE_SCOPE_REFRESH_SECONDS:-300}
+      MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB:-512}
+      MAX_VIDEO_MB: ${MAX_VIDEO_MB:-500}
+      YANDEX_DISK_MAX_VIDEO_MB: ${YANDEX_DISK_MAX_VIDEO_MB:-10240}
+      FFMPEG_TIMEOUT_SECONDS: ${FFMPEG_TIMEOUT_SECONDS:-28800}
+    ports:
+      - "127.0.0.1:${RECEIVER_PORT:-8080}:8080"
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py", "receiver"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    <<: *music-common
+    command: ["python", "docker/worker-entrypoint.py"]
+    environment:
+      ACR_HOST: ${ACR_HOST:-identify-eu-west-1.acrcloud.com}
+      ACR_ACCESS_KEY: ${ACR_ACCESS_KEY:-}
+      ACR_SECRET_KEY: ${ACR_SECRET_KEY:-}
+      ACR_EXECUTE: ${ACR_EXECUTE:-0}
+      ACR_MAX_RETRIES: ${ACR_MAX_RETRIES:-2}
+      ACR_RETRY_BASE_SECONDS: ${ACR_RETRY_BASE_SECONDS:-5}
+      ACR_RETRY_MAX_SECONDS: ${ACR_RETRY_MAX_SECONDS:-60}
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+      receiver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py", "database"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  cisnet-browser:
+    image: ${CISNET_IMAGE:-cisnet-playwright:local}
+    build:
+      context: ${CISNET_BUILD_CONTEXT:-../cisnet-playwright}
+      dockerfile: Dockerfile
+      args:
+        PLAYWRIGHT_IMAGE: ${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.62.1-noble}
+    init: true
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    shm_size: 1gb
+    environment:
+      HOME: /var/lib/cisnet-playwright
+      DISPLAY: :99
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      CISNET_CDP_BIND_ADDRESS: 0.0.0.0
+      CISNET_CDP_PORT: "9223"
+      NOVNC_BIND_ADDRESS: 0.0.0.0
+      VNC_PASSWORD: ${VNC_PASSWORD:-}
+    volumes:
+      - cisnet-profile:/var/lib/cisnet-playwright
+    expose:
+      - "9223"
+    ports:
+      - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/opt/cisnet-playwright/container-healthcheck.sh"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
+
+  cisnet-runner:
+    image: ${CISNET_RUNNER_IMAGE:-music-verifier-cisnet-runner:local}
+    build:
+      <<: *music-build
+      target: cisnet-runner
+    init: true
+    user: "${APP_UID:-10001}:${APP_GID:-10001}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    volumes:
+      - music-data:/opt/music-verifier/data
+    environment:
+      CISNET_EMAIL: ${CISNET_EMAIL:-}
+      CISNET_PASSWORD: ${CISNET_PASSWORD:-}
+      CISNET_CDP_ENDPOINT: http://cisnet-browser:9223
+      CISNET_PLAYWRIGHT_MODULE: /opt/music-verifier/node_modules/playwright
+      CISNET_ADAPTER_CWD: /opt/music-verifier
+      CISNET_WRAPPER: /opt/music-verifier/docker/cisnet-wrapper.py
+      CISNET_INTERVAL_SECONDS: ${CISNET_INTERVAL_SECONDS:-60}
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+      cisnet-browser:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py", "cisnet-runner"]
+      interval: 30s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+volumes:
+  music-data:
+  cisnet-profile:

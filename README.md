@@ -64,9 +64,9 @@ state: схема приложения 12, две завершённые recogni
 
 Только статически или ограниченно подтверждено:
 
-- перенос в Docker Compose описан ниже как целевая архитектура, но ещё не
-  реализован;
-- полный suite из 217 тестов прошёл в отдельном network namespace без внешней
+- Dockerfile, Compose, initializer и healthchecks реализованы, но Docker Engine
+  на текущем host отсутствует и images ещё не собирались;
+- полный suite из 221 теста прошёл в отдельном network namespace без внешней
   сети и production data; два native ACRCloud-теста дополнительно прошли в
   SDK-окружении;
 - live-проверка CIS-Net после очистки не выполнялась; production adapter
@@ -74,10 +74,10 @@ state: схема приложения 12, две завершённые recogni
 
 Не завершено:
 
-- нет `Dockerfile`, `compose.yml`/`compose.yaml`, `.dockerignore`, container
-  entrypoint и container healthcheck;
-- host-systemd оркестрация CIS-Net ещё не заменена контейнерной;
-- нет отдельного worker/CIS-Net heartbeat, пригодного для healthcheck;
+- не выполнены image build и staging smoke на Docker host;
+- текущий host-systemd deployment ещё не переключён на контейнерный;
+- worker healthcheck подтверждает process lifecycle и SQLite, но не измеряет
+  прогресс длительного ACRCloud scan;
 - исходники и история хранятся в GitHub-репозиториях `messazoid/yougile_auto`
   и `messazoid/cidnet_auto`;
 - Compose deployment и cutover не прошли staging/live validation.
@@ -229,11 +229,10 @@ CIS-Net/Playwright:
 `CISNET_ENV_LOADED` — внутренний marker wrapper, не пользовательская настройка.
 Resolver и receiver используют единое имя `YOUGILE_ALLOWED_COLUMN_IDS`.
 
-Для будущего Compose несекретные параметры допустимо передавать через
-root-owned `env_file`. Credentials следует монтировать как Docker/Compose
-secrets в `/run/secrets`; текущий код не поддерживает `*_FILE`, поэтому до
-контейнеризации нужен entrypoint, который безопасно экспортирует значения, или
-малое явное изменение кода. Значения не помещать в YAML.
+Compose читает отслеживаемый корневой `.env`: несекретные значения сохранены,
+а поля credentials пустые. На целевом сервере администратор заполняет локальную
+копию и устанавливает mode 600. Заполненный файл нельзя коммитить; значения не
+помещаются в Dockerfile, image или Compose YAML.
 
 ## Текущий systemd deployment
 
@@ -473,83 +472,38 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src \
 На production сервере эту команду не используйте. Перед запуском CI отдельно
 докажите, что network transport подменён во всех выбранных tests.
 
-## Планируемый Docker Compose
+## Docker Compose
 
-Compose — рекомендуемое направление, но артефактов пока нет и команду
-`docker compose up` выполнять нечем.
+Контейнерный комплект реализован в `Dockerfile`, `compose.yaml`, `docker/` и
+соседнем `/opt/cisnet-playwright/Dockerfile`. Он содержит пять сервисов:
 
-Минимальный bundle:
+1. `init-data` — однократно создаёт чистый named volume, schema 12 и CIS-Net
+   baseline; operational-таблицы остаются пустыми;
+2. `receiver` — Uvicorn и YouGile intake, host port только `127.0.0.1:8080`;
+3. `worker` — один ACRCloud worker и aggregation;
+4. `cisnet-browser` — Xvfb, Fluxbox, Chromium/CDP и noVNC;
+5. `cisnet-runner` — container-native замена systemd timer/path.
 
-1. `receiver` — общий Python image, Uvicorn слушает container `0.0.0.0:8080`,
-   host publish только `127.0.0.1:8080`; TLS/webhook ingress обеспечивает
-   согласованный reverse proxy.
-2. `worker` — тот же pinned Python image, отдельный command и ровно одна
-   replica; shared `data/`, без опубликованных портов.
-3. `cisnet` — один container, объединяющий automation, Xvfb, Fluxbox,
-   Chromium/CDP и noVNC. Такое объединение сохраняет localhost-only CDP и
-   заменяет недоступные внутри container `systemctl/systemd-run`. Публиковать
-   только `127.0.0.1:6080`; `5900` и `9223` наружу не публиковать.
-4. Опциональный one-shot `init/verify` — создаёт каталоги на новом пустом
-   стенде или только проверяет существующий snapshot. В migration mode он
-   должен fail, если production DB отсутствует, а не создавать пустую.
+Оба runner-компонента используют один persistent volume
+`music-verifier_music-data`. CDP `9223` доступен только внутри Compose network,
+noVNC публикуется только на `127.0.0.1:6080`. Browser profile находится в
+отдельном volume и не входит в image.
 
-`receiver`, `worker` и `cisnet` монтируют один host-persistent
-`/srv/music-verifier/data` в одинаковый application path. Browser cache и
-`node_modules` запекаются в image; `cdp-profile` создаётся заново с mode 700 и
-не переносит cookies. Для image нужны non-root users и согласованные владельцы
-bind mounts. CIS-Net container не должен быть privileged.
+Корневой `.env` сохранён в Git с несекретными настройками и пустыми полями
+секретов. Перед запуском на целевом сервере заполните только пустые значения и
+установите mode 600; заполненный файл запрещено коммитить. `data/`, tests,
+offline reference data, venv, node_modules, Git и временные artifacts исключены
+из build context/final images.
 
-Startup ordering: `init/verify` success -> receiver healthcheck -> worker и
-CIS-Net. `depends_on` не заменяет healthcheck. Restart policy —
-`unless-stopped` для long-running services; one-shot init не перезапускать.
-Для worker и CIS-Net ещё требуется реализовать heartbeat/healthcheck; проверка
-одного PID недостаточна.
-
-Предлагаемый multi-stage build:
-
-- test/build stage устанавливает pinned dependencies, проверяет wheel hashes,
-  запускает network-blocked tests и собирает runtime layers;
-- final Python image содержит только runtime `src/`, нужные wrappers, FFmpeg и
-  installed dependencies;
-- final CIS-Net image фиксирует Playwright 1.62.1 и совместимый Chromium,
-  содержит только `launch-cdp.js`, desktop/supervisor и production adapter;
-- version/tag и base image digest фиксируются в release manifest.
-
-Минимум для `.dockerignore`:
-
-```text
-.git
-.env
-**/.env
-config/*.env
-!config/*.env.example
-data/
-venvs/
-node_modules/
-**/__pycache__/
-*.py[cod]
-.pytest_cache/
-.playwright-mcp/
-backup/
-backup-*/
-tmp/
-p/
-opt/
-*.log
-*.png
-*.jpg
-```
-
-Tests не нужно терять из source repository. Если images собирает CI, test stage
-получает `tests/`, а final stage их не копирует. На production сервер передаются
-готовые images, Compose/release manifest, config templates, отдельно secrets и
-persistent state — не весь build context.
+Полная инструкция по сборке, первому запуску, чистой БД, проверкам, backup и
+обновлению находится в `docs/DOCKER.md`. На текущем сервере Docker отсутствует,
+поэтому выполнены статические проверки, но images и Compose stack здесь не
+запускались.
 
 ## Checklist миграции и cutover
 
-1. Создать Dockerfile(s), Compose, `.dockerignore`, entrypoints, healthchecks,
-   release manifest и container-native CIS-Net supervisor.
-2. Собрать pinned images в CI; прогнать syntax/unit/fake-API integration tests
+1. Установить Docker Engine/Compose на отдельном staging или новом сервере.
+2. Собрать pinned images; прогнать syntax/unit/fake-API integration tests
    без внешней сети и restore rehearsal на обезличенном snapshot.
 3. Зафиксировать source manifest, версии, текущие units, owners/modes, объём
    state, SQLite schema/integrity и rollback window.

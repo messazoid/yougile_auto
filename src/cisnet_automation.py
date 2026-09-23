@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -25,7 +26,7 @@ from job_store import PipelineStore
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_ROOT = BASE_DIR / "data"
 DB_PATH = DATA_ROOT / "queue" / "pipeline.sqlite3"
-WRAPPER = BASE_DIR / "yougile-cisnet"
+WRAPPER = Path(os.getenv("CISNET_WRAPPER", BASE_DIR / "yougile-cisnet"))
 
 
 def initialize(db_path: Path, data_root: Path) -> dict:

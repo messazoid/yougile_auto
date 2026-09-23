@@ -8,7 +8,7 @@ import contextlib
 from io import StringIO
 
 from cisnet_cli import (
-    CisnetCommandError, _parse_positions, aggregation_runs, create_job, execute_search,
+    CisnetCommandError, _parse_positions, _run_adapter_streaming, aggregation_runs, create_job, execute_search,
     main, manual_request, requests_from_aggregation, run_requests,
     safe_playwright_log_lines, session_action,
 )
@@ -38,6 +38,17 @@ class CisnetCliTests(unittest.TestCase):
         self.assertEqual(safe_playwright_log_lines(raw), [
             '[CISNET-PLAYWRIGHT] {"step":"login.wait","event":"failed","code":"TIMEOUT"}'
         ])
+
+    def test_adapter_working_directory_can_be_overridden_for_container(self):
+        process = MagicMock()
+        process.stdout = StringIO("")
+        process.stderr = StringIO("")
+        process.wait.return_value = 0
+        with patch.dict("cisnet_cli.os.environ", {"CISNET_ADAPTER_CWD": str(self.root)}):
+            with patch("cisnet_cli.subprocess.Popen", return_value=process) as popen:
+                result = _run_adapter_streaming(["node", "adapter.js"])
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(popen.call_args.kwargs["cwd"], str(self.root))
 
     def test_session_failure_forwards_only_safe_playwright_trace(self):
         stderr = (
