@@ -16,9 +16,12 @@ YouGile Music Verifier вместе с CIS-Net Playwright.
 - `/opt/cisnet-playwright` — Node/Playwright, Chromium launcher и desktop
   scripts.
 
-Remote для репозиториев не настроен. Перед передачей на рабочий сервер нужно
-выбрать корпоративное Git-хранилище либо сформировать проверяемый release
-archive.
+Настроены SSH remotes в приватные репозитории владельца `messazoid`:
+
+- Music Verifier: `git@github.com:messazoid/yougile_auto.git`;
+- CIS-Net Playwright: `git@github.com:messazoid/cidnet_auto.git`.
+
+Первая отправка ожидает настройки SSH-авторизации этого сервера в GitHub.
 
 ## Что входит в исходный комплект
 
@@ -91,7 +94,7 @@ Native ACRCloud library подтверждена только для x86_64/glib
 
 ## Открытые решения перед контейнеризацией
 
-- корпоративный Git remote и правила release tags;
+- GitHub SSH-авторизация, branch protection и правила release tags;
 - TLS/reverse proxy для webhook;
 - UID/GID пользователей на новом сервере;
 - способ инъекции Docker secrets;
