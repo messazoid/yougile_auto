@@ -25,7 +25,7 @@ If an existing `cisnet-profile` volume was first used by a browser container
 with an automatically generated hostname, Chromium can refuse to open it after
 the container is recreated. Its error mentions `SingletonLock` and "another
 computer". Stop the browser, remove only its three singleton symlinks, then
-rebuild and start the browser and runner:
+recreate the browser and runner:
 
 ```bash
 docker compose --env-file /etc/music-verifier.env stop cisnet-runner cisnet-browser
