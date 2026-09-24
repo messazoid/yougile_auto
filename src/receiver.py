@@ -8,6 +8,7 @@ import select
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 import wave
 from email.utils import parsedate_to_datetime
@@ -2333,9 +2334,14 @@ async def persistent_worker(store: PipelineStore = STORE):
 def write_latest_event(payload: dict) -> None:
     EVENTS_DIR.mkdir(parents=True, exist_ok=True, mode=0o750)
     target = EVENTS_DIR / "latest.json"
-    temporary = EVENTS_DIR / "latest.json.tmp"
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(target)
+    descriptor, name = tempfile.mkstemp(prefix="latest.", suffix=".json.tmp", dir=EVENTS_DIR)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 @app.on_event("startup")
