@@ -10,15 +10,17 @@ There are no host service units or host runtime wrappers in this copy.
 - `src/`, `scripts/`, `docker/`: application and container entrypoints;
 - `cisnet-playwright/`: browser image source;
 - `config/`: dependency locks and the offline Python wheelhouse;
-- `.env`: nonsecret template; `compose.yaml`: five services and two persistent
-  named volumes;
+- `.env`: nonsecret template; `compose.yaml`: five services, application data
+  in `./data` for new installs, and a named browser-profile volume;
 - `bin/`: optional Compose command wrappers;
 - `tests/`: source and runtime checks.
 
 The source server's `data/`, virtual environments, browser profile, and working
-credentials are not in this copy. Docker creates fresh named volumes on first
-start. To retain existing production history, restore a consistent snapshot of
-the whole data tree into an empty volume before `up -d`. Never run this
+credentials are not in this copy. New installations created from `.env` put
+application state in the Git-ignored `./data` directory. Existing protected env
+files without `MUSIC_DATA_SOURCE` continue using the named `music-data` volume
+until they are deliberately migrated. To retain existing production history,
+restore a consistent snapshot of the whole data tree before `up -d`. Never run this
 stack and the existing receiver or worker against the same YouGile scope.
 
 ## Build and start

@@ -9,7 +9,8 @@
    disabled during initial checks.
 4. Run `docker compose --env-file /etc/music-verifier.env config --quiet` and
    `build`. If retaining history, stop the old writers and restore a consistent
-   whole-data snapshot into an empty Docker volume before `up -d`.
+   whole-data snapshot into the configured data source before `up -d` (the
+   Git-ignored `./data` directory for new installs).
 5. Start the stack with `up -d`. Check `ps -a`, receiver `/health`, the SQLite
    healthcheck, and the browser's noVNC page through a local or SSH tunnel.
 6. Configure HTTPS routing to `127.0.0.1:8080` on the target host. Apply webhook

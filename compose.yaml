@@ -19,7 +19,7 @@ x-music-common: &music-common
   tmpfs:
     - /tmp:size=256m,mode=1777
   volumes:
-    - music-data:/opt/music-verifier/data
+    - ${MUSIC_DATA_SOURCE:-music-data}:/opt/music-verifier/data
   security_opt:
     - no-new-privileges:true
   cap_drop:
@@ -37,7 +37,7 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
     volumes:
-      - music-data:/opt/music-verifier/data
+      - ${MUSIC_DATA_SOURCE:-music-data}:/opt/music-verifier/data
     environment:
       APP_UID: ${APP_UID:-10001}
       APP_GID: ${APP_GID:-10001}
@@ -172,7 +172,7 @@ services:
     tmpfs:
       - /tmp:size=256m,mode=1777
     volumes:
-      - music-data:/opt/music-verifier/data
+      - ${MUSIC_DATA_SOURCE:-music-data}:/opt/music-verifier/data
     environment:
       CISNET_EMAIL: ${CISNET_EMAIL:-}
       CISNET_PASSWORD: ${CISNET_PASSWORD:-}

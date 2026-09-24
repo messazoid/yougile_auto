@@ -188,13 +188,22 @@ case "$command_name" in
     ;;
   yougile-reset-data)
     if [[ "$#" -eq 0 || ( "$#" -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ) ]]; then
-      echo "Plan: stop this Compose project and permanently remove ${PROJECT_NAME}_music-data."
+      echo "Plan: stop this Compose project and permanently remove ${PROJECT_NAME}_music-data only when it is the active data source."
+      echo "A bind-mounted data directory is never removed by this command."
       echo "The CIS-Net browser profile volume remains intact."
       echo "Usage: yougile-reset-data --execute 'RESET MUSIC-VERIFIER DATA'"
       exit 0
     fi
     if [[ "$#" -ne 2 || "$1" != "--execute" || "$2" != "RESET MUSIC-VERIFIER DATA" ]]; then
       echo "Usage: yougile-reset-data --execute 'RESET MUSIC-VERIFIER DATA'" >&2
+      exit 2
+    fi
+    active_data_mount="$(
+      compose config --format json |
+        python3 -c 'import json,sys; services=json.load(sys.stdin)["services"]; mounts=[m for m in services["receiver"]["volumes"] if m["target"] == "/opt/music-verifier/data"]; print("{}:{}".format(mounts[0]["type"], mounts[0]["source"]) if len(mounts) == 1 else "invalid")'
+    )"
+    if [[ "$active_data_mount" != "volume:${PROJECT_NAME}_music-data" ]]; then
+      echo "yougile-reset-data: refusing to remove the named volume while the active data source is different." >&2
       exit 2
     fi
     compose down --remove-orphans

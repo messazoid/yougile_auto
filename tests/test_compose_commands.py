@@ -29,6 +29,10 @@ class ComposeCommandTests(unittest.TestCase):
             "#!/usr/bin/env bash\n"
             'printf "%s\\t" "$@" >>"$CAPTURE_FILE"\n'
             'printf "\\n" >>"$CAPTURE_FILE"\n'
+            'if [[ " $* " == *" config --format json "* ]]; then\n'
+            '  printf "%s\\n" "$MOCK_COMPOSE_CONFIG"\n'
+            '  exit 0\n'
+            'fi\n'
             'if [[ " $* " == *" --columns "* && -n "${MOCK_SELECTION:-}" ]]; then\n'
             '  printf "YOUGILE_RESOLVE_SELECTED_COLUMN_IDS=%s\\n" "$MOCK_SELECTION"\n'
             'fi\n',
@@ -49,6 +53,11 @@ class ComposeCommandTests(unittest.TestCase):
             "PATH": f"{self.fake_bin}:{self.environment['PATH']}",
             "YOUGILE_ENV_FILE": str(self.environment_file),
             "YOUGILE_REPO_ROOT": str(self.repository),
+            "MOCK_COMPOSE_CONFIG": (
+                '{"services":{"receiver":{"volumes":['
+                '{"type":"volume","source":"music-verifier_music-data",'
+                '"target":"/opt/music-verifier/data"}]}}}'
+            ),
         })
 
     def tearDown(self):
@@ -110,6 +119,17 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertIn("CISNET_BUILD_CONTEXT=./cisnet-playwright", template)
         self.assertTrue((PROJECT_ROOT / "cisnet-playwright" / "Dockerfile").is_file())
 
+    def test_new_installs_use_ignored_data_directory_and_all_app_mounts_share_it(self):
+        template = (PROJECT_ROOT / ".env").read_text(encoding="utf-8")
+        compose = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("MUSIC_DATA_SOURCE=./data", template)
+        self.assertEqual(
+            compose.count("${MUSIC_DATA_SOURCE:-music-data}:/opt/music-verifier/data"),
+            3,
+        )
+        self.assertIn("/data/", (PROJECT_ROOT / ".gitignore").read_text())
+        self.assertIn("\ndata\n", (PROJECT_ROOT / ".dockerignore").read_text())
+
     def test_resolve_columns_updates_only_host_env_after_selection(self):
         column = "22222222-2222-4222-8222-222222222222"
         self.environment["YOUGILE_REPO_ROOT"] = str(PROJECT_ROOT)
@@ -135,8 +155,23 @@ class ComposeCommandTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self._captured_calls()
-        self.assertEqual(calls[0][-2:], ["down", "--remove-orphans"])
-        self.assertEqual(calls[1], ["volume", "rm", "music-verifier_music-data"])
+        self.assertEqual(calls[0][-3:], ["config", "--format", "json"])
+        self.assertEqual(calls[1][-2:], ["down", "--remove-orphans"])
+        self.assertEqual(calls[2], ["volume", "rm", "music-verifier_music-data"])
+
+    def test_reset_refuses_bind_mount_without_stopping_stack(self):
+        self.environment["MOCK_COMPOSE_CONFIG"] = (
+            '{"services":{"receiver":{"volumes":['
+            '{"type":"bind","source":"/srv/music/data",'
+            '"target":"/opt/music-verifier/data"}]}}}'
+        )
+        result = self._run_command(
+            "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("refusing", result.stderr)
+        self.assertEqual(len(self._captured_calls()), 1)
+        self.assertEqual(self._captured_calls()[0][-3:], ["config", "--format", "json"])
 
     def test_reset_requires_exact_confirmation_without_calling_docker(self):
         result = self._run_command("yougile-reset-data", "wrong confirmation")
