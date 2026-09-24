@@ -14,12 +14,16 @@ docker compose --env-file /etc/music-verifier.env ps -a
 docker compose --env-file /etc/music-verifier.env logs --tail=100 receiver worker cisnet-runner cisnet-browser
 ```
 
-`init-data` creates a clean SQLite database in an empty `music-data` volume. It
-also accepts a restored, unmarked volume after checking SQLite integrity, the
+The `.env` template sets `MUSIC_DATA_SOURCE=./data`, so new installations keep
+application state in the checkout's Git-ignored `data/` directory. Existing
+protected env files without this setting continue using the named `music-data`
+volume. `init-data` creates a clean SQLite database in an empty data directory. It
+also accepts a restored, unmarked directory after checking SQLite integrity, the
 current schema, and the CIS-Net baseline. It will not migrate an old schema or
 replace a missing database. `cisnet-profile` holds the browser profile.
-Both volumes survive container replacement. Never use `down -v` unless deleting
-all state is explicitly intended.
+The data directory and browser volume survive container replacement. Never use
+`down -v` unless deleting named volumes, including the browser profile and any
+legacy application data, is explicitly intended.
 
 If an existing `cisnet-profile` volume was first used by a browser container
 with an automatically generated hostname, Chromium can refuse to open it after
@@ -86,23 +90,75 @@ done only as part of the cutover.
 | `yougile-runs`, `yougile-resolve`, `yougile-cisnet` | Run the corresponding CLI inside a container |
 | `recognize-wav -i FILE [--force]` | Copy the WAV temporarily into the worker and queue it |
 | `yougile-env` | Edit the protected host environment file |
-| `yougile-reset-data` | Print the plan; `--execute 'RESET MUSIC-VERIFIER DATA'` removes only the application data volume |
+| `yougile-reset-data` | Print the plan; `--execute 'RESET MUSIC-VERIFIER DATA'` removes the active named application data volume and refuses a bind mount |
 
 The command installer refuses to overwrite existing host commands. The reset
-command stops this Compose project before removing data and preserves the
-browser profile volume. `recognize-wav` requires a running worker container.
+command removes only an active named application data volume and refuses a
+bind-mounted data directory. It preserves the browser profile volume.
+`recognize-wav` requires a running worker container.
 `yougile-resolve --columns` reads YouGile settings from the receiver container,
 then saves selected column IDs into the protected host environment file. Run
 `yougile-restart` when ready to apply the changed scope to the receiver.
 
 ## State and backup
 
+### Move an existing named volume into `./data`
+
+An existing server continues using its named volume after this code update.
+Migrate it during a short maintenance window, with no running commands writing
+to the queue. From the checkout root, first confirm that the target path is
+absent and has enough free space for a second full copy of the volume:
+
+```bash
+source_path="$(docker volume inspect music-verifier_music-data --format '{{.Mountpoint}}')"
+du -sh "$source_path"
+df -h .
+test ! -e data && test ! -L data
+```
+
+Only proceed when the copy fits on the target filesystem. Then:
+
+```bash
+(
+  set -euo pipefail
+  docker compose --env-file /etc/music-verifier.env stop receiver worker cisnet-runner
+  source_path="$(docker volume inspect music-verifier_music-data --format '{{.Mountpoint}}')"
+  test -f "$source_path/queue/pipeline.sqlite3"
+  test ! -e data && test ! -L data
+  mkdir data
+  cp -a "$source_path"/. data/
+  diff -qr "$source_path" data
+)
+```
+
+The `diff` must succeed before changing the protected environment file. Add
+`MUSIC_DATA_SOURCE=./data` to `/etc/music-verifier.env` without printing its
+contents. Then check and start the services:
+
+```bash
+docker compose --env-file /etc/music-verifier.env config --quiet
+docker compose --env-file /etc/music-verifier.env up -d init-data receiver worker cisnet-runner
+docker compose --env-file /etc/music-verifier.env ps -a
+```
+
+Check a known existing run with `yougile-runs show RUN_ID`. Keep the old named volume as a
+rollback copy; do not remove it during migration. The local
+`compose.override.yaml` still applies, including any DNS setting for `worker`.
+`yougile-reset-data` refuses a bind-mounted data directory. If startup fails,
+remove `MUSIC_DATA_SOURCE=./data` from the protected environment file and run
+`docker compose --env-file /etc/music-verifier.env up -d`; this reattaches the
+unchanged named volume. Keep the copied `data/` directory until the cause is
+understood.
+
+### Restore a snapshot into the original named volume
+
 The copy contains no production state or credentials. A fresh start creates a
 new database and browser profile. For existing history, stop all source writers
 first, then copy the *entire* source `data/` tree, including SQLite WAL/SHM,
 audio, runs, and results, to a protected directory on the target host. After
 building the image and before `up -d`, restore that directory into a new, empty
-volume. For the default image and project names:
+volume. This legacy volume workflow requires `MUSIC_DATA_SOURCE=music-data` in
+the protected environment file. For the default image and project names:
 
 ```bash
 set -o pipefail
