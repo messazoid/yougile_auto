@@ -202,7 +202,8 @@ case "$command_name" in
       compose config --format json |
         python3 -c 'import json,sys; services=json.load(sys.stdin)["services"]; mounts=[m for m in services["receiver"]["volumes"] if m["target"] == "/opt/music-verifier/data"]; print("{}:{}".format(mounts[0]["type"], mounts[0]["source"]) if len(mounts) == 1 else "invalid")'
     )"
-    if [[ "$active_data_mount" != "volume:${PROJECT_NAME}_music-data" ]]; then
+    if [[ "$active_data_mount" != "volume:music-data" &&
+          "$active_data_mount" != "volume:${PROJECT_NAME}_music-data" ]]; then
       echo "yougile-reset-data: refusing to remove the named volume while the active data source is different." >&2
       exit 2
     fi
