@@ -1819,6 +1819,34 @@ class PipelineTests(unittest.TestCase):
         recognition = self.store.recognition(1)
         self.assertIn(f"forced-replay-{source_id}", Path(recognition["result_dir"]).name)
 
+    def test_forced_replay_recognition_uses_the_queued_configuration(self):
+        forced_prep_hash = job_store.forced_run_prep_hash(
+            receiver.PREP_CONFIG_HASH, "task", "chat", "forced-message"
+        )
+        source_id, inserted = self.store.enqueue_polled_sources(
+            "task", "chat", "forced-message",
+            [{"kind": "direct_video", "url": "https://files.example.test/video.mp4"}],
+            forced_prep_hash,
+        )[0]
+        self.assertTrue(inserted)
+        claimed = self.store.claim_source("fixture")
+        path = self.root / "audio" / "forced.wav"
+        self.store.set_audio_plan(source_id, claimed["claim_token"], "forced.mp4", 123, path)
+        make_wav(path)
+        with path.open("rb") as audio:
+            self.store.complete_audio(source_id, claimed["claim_token"], scan.inspect_audio(audio))
+
+        calls = []
+
+        def no_match(*args):
+            calls.append(1)
+            return 200, b'{"status":{"code":1001}}'
+
+        self.assertEqual(self.run_worker(transport=no_match), "complete_no_match")
+        self.assertEqual(calls, [1])
+        recognition = self.store.recognition(1)
+        self.assertTrue((Path(recognition["result_dir"]) / "scan.sqlite3").is_file())
+
     def test_parallel_claim_allows_only_one_owner(self):
         self.record(self.payload())
         self.expand()
