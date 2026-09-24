@@ -5,6 +5,7 @@ import json
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 import wave
@@ -77,6 +78,28 @@ class PipelineTests(unittest.TestCase):
             ):
                 receiver.validate_webhook_secret(value)
         self.assertEqual(receiver.validate_webhook_secret(" fixture-secret "), "fixture-secret")
+
+    def test_concurrent_webhooks_write_latest_copy_without_shared_temp_file(self):
+        events = self.root / "events"
+        barrier = threading.Barrier(2)
+        original_replace = Path.replace
+
+        def replace_together(source, target):
+            if Path(target) == events / "latest.json":
+                barrier.wait(timeout=5)
+            return original_replace(source, target)
+
+        with patch.object(receiver, "EVENTS_DIR", events), \
+             patch.object(Path, "replace", replace_together), \
+             ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(receiver.write_latest_event, {"event": "first"})
+            second = pool.submit(receiver.write_latest_event, {"event": "second"})
+            first.result(timeout=10)
+            second.result(timeout=10)
+
+        self.assertIn(json.loads((events / "latest.json").read_text())["event"],
+                      {"first", "second"})
+        self.assertEqual(list(events.glob("latest.*.json.tmp")), [])
 
     def record(self, payload):
         return self.store.record_webhook(
