@@ -90,9 +90,26 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._captured_calls()[0][-2:], ["ps", "-a"])
 
+    def test_full_status_includes_container_processes(self):
+        result = self._run_command("yougile-status", "--full")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[-2:] for call in self._captured_calls()], [["ps", "-a"], [str(self.environment_file), "top"]])
+
+    def test_installed_symlink_uses_its_own_project_by_default(self):
+        self.environment.pop("YOUGILE_REPO_ROOT")
+        result = self._run_command("yougile-status")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call = self._captured_calls()[0]
+        self.assertEqual(call[call.index("--project-directory") + 1], str(PROJECT_ROOT))
+
+    def test_cisnet_build_context_is_inside_project(self):
+        template = (PROJECT_ROOT / ".env").read_text(encoding="utf-8")
+        self.assertIn("CISNET_BUILD_CONTEXT=./cisnet-playwright", template)
+        self.assertTrue((PROJECT_ROOT / "cisnet-playwright" / "Dockerfile").is_file())
+
     def test_reset_removes_containers_before_exact_data_volume(self):
         result = self._run_command(
-            "yougile-reset-data", "RESET MUSIC-VERIFIER DATA"
+            "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self._captured_calls()
@@ -103,6 +120,23 @@ class ComposeCommandTests(unittest.TestCase):
         result = self._run_command("yougile-reset-data", "wrong confirmation")
         self.assertEqual(result.returncode, 2)
         self.assertFalse(self.capture.exists())
+
+    def test_reset_without_arguments_only_prints_plan(self):
+        result = self._run_command("yougile-reset-data")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("music-verifier_music-data", result.stdout)
+        self.assertFalse(self.capture.exists())
+
+    def test_recognize_wav_passes_input_flag_and_cleans_temporary_copy(self):
+        wav = self.root / "sample.wav"
+        wav.write_bytes(b"test")
+        result = self._run_command("recognize-wav", "-i", str(wav), "--force")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self._captured_calls()
+        self.assertEqual(calls[0][-3:-1], ["cp", str(wav)])
+        self.assertEqual(calls[2][-4:-2], ["src/recognize_wav.py", "-i"])
+        self.assertEqual(calls[2][-1], "--force")
+        self.assertEqual(calls[3][-4:-2], ["rm", "-f"])
 
     def test_installer_creates_only_expected_symlinks(self):
         target = self.root / "commands"

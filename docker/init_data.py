@@ -24,7 +24,7 @@ OPERATIONAL_TABLES = (
 
 
 def _verify_database(database: Path, require_empty: bool) -> None:
-    with sqlite3.connect(database) as db:
+    with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
         if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise RuntimeError("Initialized SQLite database failed quick_check")
         if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
@@ -32,6 +32,8 @@ def _verify_database(database: Path, require_empty: bool) -> None:
         version = db.execute("SELECT version FROM schema_info WHERE id=1").fetchone()
         if not version or version[0] != SCHEMA_VERSION:
             raise RuntimeError("Initialized SQLite database has an unexpected schema")
+        if db.execute("SELECT 1 FROM cisnet_baseline WHERE id=1").fetchone() is None:
+            raise RuntimeError("Initialized SQLite database has no CIS-Net baseline")
         if require_empty:
             populated = [
                 table for table in OPERATIONAL_TABLES
@@ -45,26 +47,35 @@ def initialize_data(data_root: Path, uid: int, gid: int) -> Path:
     data_root.mkdir(parents=True, exist_ok=True, mode=0o750)
     marker = data_root / MARKER
     first_start = not marker.exists()
-    if first_start and any(data_root.iterdir()):
-        raise RuntimeError("Refusing to initialize a non-empty unmarked data directory")
     database = data_root / "queue" / "pipeline.sqlite3"
+    imported = first_start and any(data_root.iterdir())
+    if imported and not database.is_file():
+        raise RuntimeError("Refusing an unmarked data directory without pipeline.sqlite3")
     if not first_start and not database.is_file():
         raise RuntimeError("Initialized data volume is missing pipeline.sqlite3")
-    for name in DIRECTORIES:
-        (data_root / name).mkdir(mode=0o750, exist_ok=True)
-    store = PipelineStore(database)
-    store.initialize()
-    baseline(store, initialize=True)
-    _verify_database(database, require_empty=first_start)
+    if imported or not first_start:
+        # Verify restored state before any operation that could migrate its schema.
+        _verify_database(database, require_empty=False)
+    else:
+        for name in DIRECTORIES:
+            (data_root / name).mkdir(mode=0o750, exist_ok=True)
+        store = PipelineStore(database)
+        store.initialize()
+        baseline(store, initialize=True)
+        _verify_database(database, require_empty=True)
     if first_start:
+        paths = [data_root]
+        for root, directories, files in os.walk(data_root):
+            for name in directories + files:
+                path = Path(root) / name
+                if path.is_symlink():
+                    raise RuntimeError("Refusing a data volume containing symbolic links")
+                paths.append(path)
+        for path in paths:
+            os.chown(path, uid, gid, follow_symlinks=False)
         marker.write_text(f"schema={SCHEMA_VERSION}\n", encoding="ascii")
         marker.chmod(0o600)
-        for root, directories, files in os.walk(data_root):
-            os.chown(root, uid, gid)
-            for name in directories:
-                os.chown(Path(root) / name, uid, gid)
-            for name in files:
-                os.chown(Path(root) / name, uid, gid)
+        os.chown(marker, uid, gid)
     return database
 
 

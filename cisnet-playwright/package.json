@@ -1,0 +1,14 @@
+{
+  "name": "cisnet-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visible CIS-Net browser runtime for music-verifier",
+  "scripts": {
+    "check": "node --check launch-cdp.js",
+    "launch-cdp": "node launch-cdp.js"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

@@ -126,7 +126,7 @@ services:
   cisnet-browser:
     image: ${CISNET_IMAGE:-cisnet-playwright:local}
     build:
-      context: ${CISNET_BUILD_CONTEXT:-../cisnet-playwright}
+      context: ${CISNET_BUILD_CONTEXT:-./cisnet-playwright}
       dockerfile: Dockerfile
       args:
         PLAYWRIGHT_IMAGE: ${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.62.1-noble}
@@ -182,6 +182,7 @@ services:
       CISNET_ADAPTER_CWD: /opt/music-verifier
       CISNET_WRAPPER: /opt/music-verifier/docker/cisnet-wrapper.py
       CISNET_INTERVAL_SECONDS: ${CISNET_INTERVAL_SECONDS:-60}
+      CISNET_EXECUTE: ${CISNET_EXECUTE:-0}
     depends_on:
       init-data:
         condition: service_completed_successfully

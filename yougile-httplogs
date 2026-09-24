@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-exec /opt/music-verifier/venvs/receiver/bin/python \
-    /opt/music-verifier/src/yougile_logs.py --http-only "$@"

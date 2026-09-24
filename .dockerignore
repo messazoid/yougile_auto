@@ -1,4 +1,5 @@
 .git
+commands
 .github
 .agents
 .codex
@@ -36,3 +37,4 @@ docs
 deploy
 README.md
 AGENTS.md
+cisnet-playwright

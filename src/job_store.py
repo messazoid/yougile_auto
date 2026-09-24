@@ -677,7 +677,7 @@ class PipelineStore:
             )
 
     def recover_receiver_claims(self) -> None:
-        """Reset only receiver-owned stages after systemd has replaced the process."""
+        """Reset only receiver-owned stages after the receiver process restarts."""
         now = utcnow()
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
