@@ -14,7 +14,6 @@ x-music-common: &music-common
   build:
     <<: *music-build
     target: music-runtime
-  init: true
   user: "${APP_UID:-10001}:${APP_GID:-10001}"
   read_only: true
   tmpfs:
@@ -71,6 +70,7 @@ services:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       YOUGILE_API_BASE: ${YOUGILE_API_BASE:-https://yougile.com/api-v2}
       YOUGILE_API_KEY: ${YOUGILE_API_KEY:-}
+      YOUGILE_RESOLVE_CONTAINER: "1"
       YOUGILE_ALLOWED_BOARD_IDS: ${YOUGILE_ALLOWED_BOARD_IDS:-}
       YOUGILE_ALLOWED_COLUMN_IDS: ${YOUGILE_ALLOWED_COLUMN_IDS:-}
       YOUGILE_ALLOWED_TASK_IDS: ${YOUGILE_ALLOWED_TASK_IDS:-}
@@ -130,7 +130,6 @@ services:
       dockerfile: Dockerfile
       args:
         PLAYWRIGHT_IMAGE: ${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.62.1-noble}
-    init: true
     user: "pwuser"
     read_only: true
     tmpfs:
@@ -167,7 +166,6 @@ services:
     build:
       <<: *music-build
       target: cisnet-runner
-    init: true
     user: "${APP_UID:-10001}:${APP_GID:-10001}"
     read_only: true
     tmpfs:

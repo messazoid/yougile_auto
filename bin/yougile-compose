@@ -139,7 +139,25 @@ case "$command_name" in
     exec_cli receiver python src/yougile_runs.py "$@"
     ;;
   yougile-resolve)
-    exec_cli receiver python src/yougile_resolve.py "$@"
+    columns_mode=0
+    for argument in "$@"; do
+      [[ "$argument" == "--columns" ]] && columns_mode=1
+    done
+    if [[ "$columns_mode" -eq 0 ]]; then
+      exec_cli receiver python src/yougile_resolve.py "$@"
+    fi
+    transcript="$(mktemp)"
+    trap 'rm -f -- "$transcript"' EXIT
+    compose exec -T receiver python src/yougile_resolve.py "$@" | tee "$transcript"
+    selected="$(sed -n 's/^YOUGILE_RESOLVE_SELECTED_COLUMN_IDS=//p' "$transcript" | tail -n 1)"
+    if [[ -n "$selected" ]]; then
+      if [[ "$(id -u)" -eq 0 ]]; then
+        python3 "$REPO_ROOT/bin/update-allowed-columns.py" "$ENV_FILE" "$selected"
+      else
+        sudo python3 "$REPO_ROOT/bin/update-allowed-columns.py" "$ENV_FILE" "$selected"
+      fi
+      echo "Обновлён $ENV_FILE. Для применения выполните yougile-restart."
+    fi
     ;;
   yougile-cisnet)
     exec_cli cisnet-runner python docker/cisnet-wrapper.py "$@"

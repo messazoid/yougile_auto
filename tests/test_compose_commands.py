@@ -28,7 +28,10 @@ class ComposeCommandTests(unittest.TestCase):
             self.fake_bin / "docker",
             "#!/usr/bin/env bash\n"
             'printf "%s\\t" "$@" >>"$CAPTURE_FILE"\n'
-            'printf "\\n" >>"$CAPTURE_FILE"\n',
+            'printf "\\n" >>"$CAPTURE_FILE"\n'
+            'if [[ " $* " == *" --columns "* && -n "${MOCK_SELECTION:-}" ]]; then\n'
+            '  printf "YOUGILE_RESOLVE_SELECTED_COLUMN_IDS=%s\\n" "$MOCK_SELECTION"\n'
+            'fi\n',
         )
         self._write_executable(
             self.fake_bin / "sudo",
@@ -107,6 +110,25 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertIn("CISNET_BUILD_CONTEXT=./cisnet-playwright", template)
         self.assertTrue((PROJECT_ROOT / "cisnet-playwright" / "Dockerfile").is_file())
 
+    def test_resolve_columns_updates_only_host_env_after_selection(self):
+        column = "22222222-2222-4222-8222-222222222222"
+        self.environment["YOUGILE_REPO_ROOT"] = str(PROJECT_ROOT)
+        self.environment["MOCK_SELECTION"] = column
+        result = self._run_command("yougile-resolve", "--columns")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"YOUGILE_ALLOWED_COLUMN_IDS={column}", result.stdout)
+        self.assertIn("WEBHOOK_SECRET=not-a-real-secret", self.environment_file.read_text())
+        self.assertEqual(self._captured_calls()[0][-5:], [
+            "-T", "receiver", "python", "src/yougile_resolve.py", "--columns"
+        ])
+
+    def test_resolve_columns_cancel_does_not_touch_host_env(self):
+        self.environment["YOUGILE_REPO_ROOT"] = str(PROJECT_ROOT)
+        before = self.environment_file.read_bytes()
+        result = self._run_command("yougile-resolve", "--columns")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.environment_file.read_bytes(), before)
+
     def test_reset_removes_containers_before_exact_data_volume(self):
         result = self._run_command(
             "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
@@ -167,6 +189,7 @@ class ComposeCommandTests(unittest.TestCase):
         compose_text = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
         self.assertIn('user: "pwuser"', compose_text)
         self.assertNotIn('user: "1000:1000"', compose_text)
+        self.assertNotIn("init: true", compose_text)
 
 
 if __name__ == "__main__":

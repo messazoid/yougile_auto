@@ -3,11 +3,12 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import receiver
 import yougile_resolve as resolve
@@ -25,6 +26,32 @@ COLUMN_THREE = "99999999-9999-4999-8999-999999999999"
 
 
 class YouGileResolveTests(unittest.TestCase):
+    def test_container_client_uses_injected_environment_without_host_env_file(self):
+        with patch.dict(os.environ, {
+            "YOUGILE_RESOLVE_CONTAINER": "1",
+            "YOUGILE_API_KEY": "fixture key",
+            "YOUGILE_API_BASE": "https://yougile.com/api-v2",
+            "YOUGILE_MAX_REQUESTS_PER_MINUTE": "40",
+        }), patch.object(resolve, "load_env", side_effect=AssertionError("host file read")), \
+             patch.object(receiver, "YOUGILE_API_KEY", ""):
+            resolve.configure_client()
+            self.assertEqual(receiver.YOUGILE_API_KEY, "fixture key")
+
+    def test_container_columns_emits_selection_without_saving_inside_container(self):
+        output = io.StringIO()
+        answers = iter(["1", "1", "3", "1"])
+        project = resolve.ProjectChoice(PROJECT, "Project")
+        column = resolve.ColumnChoice(PROJECT, "Project", COLUMN, "Column", 0)
+        with patch.object(resolve, "list_projects", new=AsyncMock(return_value=[project])), \
+             patch.object(resolve, "list_project_columns", new=AsyncMock(return_value=[column])):
+            result = asyncio.run(resolve.interactive_columns(
+                input_fn=lambda _: next(answers), output=output,
+                save_column_ids=lambda _: self.fail("container wrote its env file"),
+                emit_selection=True,
+            ))
+        self.assertEqual(result, 0)
+        self.assertIn(f"YOUGILE_RESOLVE_SELECTED_COLUMN_IDS={COLUMN}", output.getvalue())
+
     def test_extracts_common_url_variants(self):
         links = [
             f"https://yougile.com/task/{TASK}",
