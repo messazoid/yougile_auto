@@ -55,7 +55,7 @@ class ComposeCommandTests(unittest.TestCase):
             "YOUGILE_REPO_ROOT": str(self.repository),
             "MOCK_COMPOSE_CONFIG": (
                 '{"services":{"receiver":{"volumes":['
-                '{"type":"volume","source":"music-verifier_music-data",'
+                '{"type":"volume","source":"music-data",'
                 '"target":"/opt/music-verifier/data"}]}}}'
             ),
         })
