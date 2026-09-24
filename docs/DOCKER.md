@@ -90,11 +90,16 @@ done only as part of the cutover.
 | `yougile-runs`, `yougile-resolve`, `yougile-cisnet` | Run the corresponding CLI inside a container |
 | `recognize-wav -i FILE [--force]` | Copy the WAV temporarily into the worker and queue it |
 | `yougile-env` | Edit the protected host environment file |
-| `yougile-reset-data` | Print the plan; `--execute 'RESET MUSIC-VERIFIER DATA'` removes the active named application data volume and refuses a bind mount |
+| `yougile-reset-data` | Print the plan; `--execute 'RESET MUSIC-VERIFIER DATA'` clears active application data after checking its mount |
 
 The command installer refuses to overwrite existing host commands. The reset
-command removes only an active named application data volume and refuses a
-bind-mounted data directory. It preserves the browser profile volume.
+command stops the Compose stack, then empties only this checkout's active `data/`
+directory or removes the active named application data volume. It verifies all
+application services share that mount, refuses another bind path, a symlink, or
+a nested mount, and preserves the browser profile volume and any inactive old
+data volume. It leaves the stack stopped. Run `yougile-start` to initialize a
+new queue after an intentional reset. No confirmation is needed for the
+no-argument plan; execution requires the exact phrase shown there.
 `recognize-wav` requires a running worker container.
 `yougile-resolve --columns` reads YouGile settings from the receiver container,
 then saves selected column IDs into the protected host environment file. Run
@@ -144,7 +149,7 @@ docker compose --env-file /etc/music-verifier.env ps -a
 Check a known existing run with `yougile-runs show RUN_ID`. Keep the old named volume as a
 rollback copy; do not remove it during migration. The local
 `compose.override.yaml` still applies, including any DNS setting for `worker`.
-`yougile-reset-data` refuses a bind-mounted data directory. If startup fails,
+If startup fails after migration,
 remove `MUSIC_DATA_SOURCE=./data` from the protected environment file and run
 `docker compose --env-file /etc/music-verifier.env up -d`; this reattaches the
 unchanged named volume. Keep the copied `data/` directory until the cause is

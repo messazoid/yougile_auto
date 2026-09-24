@@ -22,6 +22,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
     --project-directory "$PROJECT_DIR" --env-file "$ENV_FILE"
   )
   DOCKER_COMMAND=(docker)
+  PYTHON_COMMAND=(python3)
 else
   if ! sudo test -r "$ENV_FILE"; then
     echo "yougile-compose: env file is unavailable: $ENV_FILE" >&2
@@ -32,6 +33,7 @@ else
     --project-directory "$PROJECT_DIR" --env-file "$ENV_FILE"
   )
   DOCKER_COMMAND=(sudo docker)
+  PYTHON_COMMAND=(sudo python3)
 fi
 
 compose() {
@@ -188,9 +190,11 @@ case "$command_name" in
     ;;
   yougile-reset-data)
     if [[ "$#" -eq 0 || ( "$#" -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ) ]]; then
-      echo "Plan: stop this Compose project and permanently remove ${PROJECT_NAME}_music-data only when it is the active data source."
-      echo "A bind-mounted data directory is never removed by this command."
-      echo "The CIS-Net browser profile volume remains intact."
+      echo "Plan: stop this Compose project and permanently clear its active application data."
+      echo "For ./data, remove its contents only when every application service uses this checkout's data directory."
+      echo "For the legacy named volume, remove ${PROJECT_NAME}_music-data only when it is active."
+      echo "The CIS-Net browser profile and any inactive old data volume remain intact."
+      echo "The stack stays stopped; run yougile-start to initialize a fresh database."
       echo "Usage: yougile-reset-data --execute 'RESET MUSIC-VERIFIER DATA'"
       exit 0
     fi
@@ -198,17 +202,14 @@ case "$command_name" in
       echo "Usage: yougile-reset-data --execute 'RESET MUSIC-VERIFIER DATA'" >&2
       exit 2
     fi
-    active_data_mount="$(
-      compose config --format json |
-        python3 -c 'import json,sys; services=json.load(sys.stdin)["services"]; mounts=[m for m in services["receiver"]["volumes"] if m["target"] == "/opt/music-verifier/data"]; print("{}:{}".format(mounts[0]["type"], mounts[0]["source"]) if len(mounts) == 1 else "invalid")'
-    )"
-    if [[ "$active_data_mount" != "volume:music-data" &&
-          "$active_data_mount" != "volume:${PROJECT_NAME}_music-data" ]]; then
-      echo "yougile-reset-data: refusing to remove the named volume while the active data source is different." >&2
-      exit 2
-    fi
+    active_data_mount="$(compose config --format json |
+      "${PYTHON_COMMAND[@]}" "$SCRIPT_DIR/reset-compose-data.py" check "$PROJECT_DIR" "$PROJECT_NAME")"
     compose down --remove-orphans
-    "${DOCKER_COMMAND[@]}" volume rm "${PROJECT_NAME}_music-data"
+    if [[ "$active_data_mount" == "bind" ]]; then
+      "${PYTHON_COMMAND[@]}" "$SCRIPT_DIR/reset-compose-data.py" clear-bind "$PROJECT_DIR"
+    else
+      "${DOCKER_COMMAND[@]}" volume rm "${PROJECT_NAME}_music-data"
+    fi
     ;;
   *)
     echo "Unknown command: $command_name" >&2

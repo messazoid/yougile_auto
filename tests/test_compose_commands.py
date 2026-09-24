@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -48,16 +49,19 @@ class ComposeCommandTests(unittest.TestCase):
             'else exec /usr/bin/id "$@"; fi\n',
         )
         self.environment = os.environ.copy()
+        volume_mount = {
+            "type": "volume", "source": "music-data",
+            "target": "/opt/music-verifier/data",
+        }
         self.environment.update({
             "CAPTURE_FILE": str(self.capture),
             "PATH": f"{self.fake_bin}:{self.environment['PATH']}",
             "YOUGILE_ENV_FILE": str(self.environment_file),
             "YOUGILE_REPO_ROOT": str(self.repository),
-            "MOCK_COMPOSE_CONFIG": (
-                '{"services":{"receiver":{"volumes":['
-                '{"type":"volume","source":"music-data",'
-                '"target":"/opt/music-verifier/data"}]}}}'
-            ),
+            "MOCK_COMPOSE_CONFIG": json.dumps({"services": {
+                name: {"volumes": [volume_mount]}
+                for name in ("init-data", "receiver", "worker", "cisnet-runner")
+            }}),
         })
 
     def tearDown(self):
@@ -160,18 +164,83 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertEqual(calls[2], ["volume", "rm", "music-verifier_music-data"])
 
     def test_reset_refuses_bind_mount_without_stopping_stack(self):
-        self.environment["MOCK_COMPOSE_CONFIG"] = (
-            '{"services":{"receiver":{"volumes":['
-            '{"type":"bind","source":"/srv/music/data",'
-            '"target":"/opt/music-verifier/data"}]}}}'
-        )
+        self._set_bind_mount("/srv/music/data")
         result = self._run_command(
             "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
         )
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("refusing", result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("outside this checkout", result.stderr)
         self.assertEqual(len(self._captured_calls()), 1)
         self.assertEqual(self._captured_calls()[0][-3:], ["config", "--format", "json"])
+
+    def _set_bind_mount(self, source: str, *, runner_source: str | None = None):
+        self.environment["MOCK_COMPOSE_CONFIG"] = json.dumps({"services": {
+            name: {"volumes": [{
+                "type": "bind",
+                "source": runner_source if name == "cisnet-runner" and runner_source else source,
+                "target": "/opt/music-verifier/data",
+            }]}
+            for name in ("init-data", "receiver", "worker", "cisnet-runner")
+        }})
+
+    def _make_data(self):
+        data = self.repository / "data"
+        (data / "queue").mkdir(parents=True)
+        (data / ".container-initialized").write_text("ok")
+        (data / "queue" / "pipeline.sqlite3").write_bytes(b"db")
+        (data / "recognition-runs").mkdir()
+        (data / "recognition-runs" / "scan.json").write_text("result")
+        return data
+
+    def test_reset_clears_only_this_checkout_data_directory(self):
+        data = self._make_data()
+        self._set_bind_mount(str(data))
+        (self.repository / "keep.txt").write_text("keep")
+        result = self._run_command(
+            "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[-2:] for call in self._captured_calls()], [
+            ["--format", "json"], ["down", "--remove-orphans"],
+        ])
+        self.assertEqual(list(data.iterdir()), [])
+        self.assertEqual((self.repository / "keep.txt").read_text(), "keep")
+
+    def test_reset_refuses_mismatched_service_mount_before_down(self):
+        data = self._make_data()
+        self._set_bind_mount(str(data), runner_source="/srv/other/data")
+        result = self._run_command(
+            "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("different data sources", result.stderr)
+        self.assertEqual(len(self._captured_calls()), 1)
+        self.assertTrue((data / "queue" / "pipeline.sqlite3").exists())
+
+    def test_reset_refuses_symlinked_data_before_down(self):
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        (self.repository / "data").symlink_to(elsewhere, target_is_directory=True)
+        self._set_bind_mount(str(self.repository / "data"))
+        result = self._run_command(
+            "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("real directory", result.stderr)
+        self.assertEqual(len(self._captured_calls()), 1)
+
+    def test_reset_refuses_incomplete_data_before_down(self):
+        data = self.repository / "data"
+        data.mkdir()
+        (data / "unrelated.txt").write_text("keep")
+        self._set_bind_mount(str(data))
+        result = self._run_command(
+            "yougile-reset-data", "--execute", "RESET MUSIC-VERIFIER DATA"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("data marker is missing", result.stderr)
+        self.assertEqual(len(self._captured_calls()), 1)
+        self.assertEqual((data / "unrelated.txt").read_text(), "keep")
 
     def test_reset_requires_exact_confirmation_without_calling_docker(self):
         result = self._run_command("yougile-reset-data", "wrong confirmation")
