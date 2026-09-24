@@ -4,7 +4,8 @@
   "private": true,
   "description": "Visible CIS-Net browser runtime for music-verifier",
   "scripts": {
-    "check": "node --check launch-cdp.js",
+    "check": "node --check launch-cdp.js && node --check configure-profile.js",
+    "test": "node --test test/*.test.js",
     "launch-cdp": "node launch-cdp.js"
   },
   "type": "commonjs",

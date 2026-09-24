@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 const { chromium } = require('playwright');
+const { configureProfile } = require('./configure-profile');
 
 const CDP_PORT = Number.parseInt(process.env.CISNET_CDP_PORT || '9223', 10);
 const CDP_ADDRESS = process.env.CISNET_CDP_BIND_ADDRESS || '127.0.0.1';
+const USER_DATA_DIR = '/var/lib/cisnet-playwright/cdp-profile';
 
 if (!Number.isInteger(CDP_PORT) || CDP_PORT < 1 || CDP_PORT > 65535) {
   throw new Error('CISNET_CDP_PORT must be a valid TCP port');
@@ -11,8 +13,9 @@ if (!Number.isInteger(CDP_PORT) || CDP_PORT < 1 || CDP_PORT > 65535) {
 
 async function main() {
   let closing = false;
+  configureProfile(USER_DATA_DIR);
   const context = await chromium.launchPersistentContext(
-    '/var/lib/cisnet-playwright/cdp-profile',
+    USER_DATA_DIR,
     {
     headless: false,
     viewport: null,
@@ -21,6 +24,9 @@ async function main() {
       `--remote-debugging-address=${CDP_ADDRESS}`,
       `--remote-debugging-port=${CDP_PORT}`,
       '--hide-crash-restore-bubble',
+      '--disable-save-password-bubble',
+      '--no-default-browser-check',
+      '--no-first-run',
     ],
     },
   );

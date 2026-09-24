@@ -13,7 +13,7 @@ WORKDIR /opt/cisnet-playwright
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts \
     && npm cache clean --force
-COPY launch-cdp.js cisnet-desktop.sh container-entrypoint.sh container-healthcheck.sh ./
+COPY launch-cdp.js configure-profile.js cisnet-desktop.sh container-entrypoint.sh container-healthcheck.sh ./
 RUN install -d -o pwuser -g pwuser -m 0700 \
         /var/lib/cisnet-playwright /var/lib/cisnet-playwright/.vnc \
         /var/lib/cisnet-playwright/cdp-profile \
