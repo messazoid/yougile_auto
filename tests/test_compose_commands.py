@@ -188,6 +188,7 @@ class ComposeCommandTests(unittest.TestCase):
     def test_cisnet_browser_uses_image_user(self):
         compose_text = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
         self.assertIn('user: "pwuser"', compose_text)
+        self.assertIn('    hostname: cisnet-browser\n', compose_text)
         self.assertNotIn('user: "1000:1000"', compose_text)
         self.assertNotIn("init: true", compose_text)
 
