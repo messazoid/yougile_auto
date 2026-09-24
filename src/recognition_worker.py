@@ -88,10 +88,13 @@ def scope_run_token(prep_config_hash: str) -> str | None:
     return prep_config_hash.split(marker, 1)[1] if marker in prep_config_hash else None
 
 
-def scanner_config_for_run(info: dict, cfg: WorkerConfig, sdk_info: dict, token=None) -> dict:
+def scanner_config_for_run(info: dict, cfg: WorkerConfig, sdk_info: dict, token=None,
+                           forced_replay_source_id=None) -> dict:
     persisted = scan.scanner_config(info, cfg.host, sdk_info)
     if token:
         persisted["pipeline_scope_run"] = token
+    if forced_replay_source_id is not None:
+        persisted["pipeline_forced_replay_source_job"] = forced_replay_source_id
     return persisted
 
 
@@ -187,11 +190,11 @@ def process_recognition(store: PipelineStore, claimed: dict, cfg: WorkerConfig,
                         max_requests=None) -> str:
     recognition_id = claimed["id"]
     links = store.links_for_recognition(recognition_id)
-    source_ids = [str(source_id) for source_id in store.source_ids_for_recognition(recognition_id)]
+    source_ids = store.source_ids_for_recognition(recognition_id)
     task_ids = sorted({str(link["task_id"]) for link in links if link.get("task_id")})
     message_ids = sorted({str(link["message_id"]) for link in links if link.get("message_id")})
     context = (
-        f" recognition_id={recognition_id} source_job={','.join(source_ids) or '-'}"
+        f" recognition_id={recognition_id} source_job={','.join(map(str, source_ids)) or '-'}"
         f" task_id={','.join(task_ids) or '-'} message_id={','.join(message_ids) or '-'}"
     )
     print(f"[RECOGNITION]{context} stage=started", flush=True)
@@ -213,8 +216,15 @@ def process_recognition(store: PipelineStore, claimed: dict, cfg: WorkerConfig,
     with audio.open("rb") as source:
         info = scan.inspect_audio(source)
         _, sdk_info = scan.load_sdk()
+        forced_replay_source_ids = [
+            source_id for source_id in source_ids
+            if is_forced_run_prep_hash(store.source(source_id)["prep_config_hash"])
+        ]
+        if len(forced_replay_source_ids) > 1:
+            raise StoreError("Recognition combines multiple forced replays")
         persisted_config = scanner_config_for_run(
-            info, cfg, sdk_info, store.recognition_scope_run_token(recognition_id)
+            info, cfg, sdk_info, store.recognition_scope_run_token(recognition_id),
+            forced_replay_source_ids[0] if forced_replay_source_ids else None,
         )
         if config_hash(persisted_config) != claimed["config_hash"]:
             raise StoreError("Recognition configuration changed after enqueue")
@@ -316,11 +326,10 @@ def attach_one_audio(store: PipelineStore, cfg: WorkerConfig) -> str:
             info = scan.inspect_audio(handle)
         _, sdk_info = scan.load_sdk()
         persisted_config = scanner_config_for_run(
-            info, cfg, sdk_info, scope_run_token(source["prep_config_hash"])
+            info, cfg, sdk_info, scope_run_token(source["prep_config_hash"]),
+            source["id"] if is_forced_run_prep_hash(source["prep_config_hash"]) else None,
         )
         forced_replay = is_forced_run_prep_hash(source["prep_config_hash"])
-        if forced_replay:
-            persisted_config["pipeline_forced_replay_source_job"] = source["id"]
         digest = config_hash(persisted_config)
         suffix = f"-forced-replay-{source['id']}" if forced_replay else ""
         output = cfg.runs_dir / f"{info['sha256'][:24]}-{digest[:16]}{suffix}"
