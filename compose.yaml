@@ -125,6 +125,7 @@ services:
 
   cisnet-browser:
     image: ${CISNET_IMAGE:-cisnet-playwright:local}
+    hostname: cisnet-browser
     build:
       context: ${CISNET_BUILD_CONTEXT:-./cisnet-playwright}
       dockerfile: Dockerfile
