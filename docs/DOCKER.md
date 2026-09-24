@@ -21,6 +21,25 @@ replace a missing database. `cisnet-profile` holds the browser profile.
 Both volumes survive container replacement. Never use `down -v` unless deleting
 all state is explicitly intended.
 
+If an existing `cisnet-profile` volume was first used by a browser container
+with an automatically generated hostname, Chromium can refuse to open it after
+the container is recreated. Its error mentions `SingletonLock` and "another
+computer". Stop the browser, remove only its three singleton symlinks, then
+rebuild and start the browser and runner:
+
+```bash
+docker compose --env-file /etc/music-verifier.env stop cisnet-runner cisnet-browser
+docker compose --env-file /etc/music-verifier.env run --rm --no-deps \
+  --entrypoint bash cisnet-browser -c \
+  'for name in SingletonLock SingletonSocket SingletonCookie; do path="$HOME/cdp-profile/$name"; if [[ -L "$path" ]]; then rm -- "$path"; fi; done'
+docker compose --env-file /etc/music-verifier.env up -d --force-recreate cisnet-browser cisnet-runner
+docker compose --env-file /etc/music-verifier.env ps -a
+```
+
+The Compose browser has a fixed hostname, so future recreations use the same
+hostname when Chromium checks its profile lock. The recovery command leaves
+the profile data, session, and the `music-data` volume untouched.
+
 The image has five services: `init-data`, `receiver`, `worker`, `cisnet-browser`,
 and `cisnet-runner`. Receiver and worker share one data volume. CDP is reachable
 only inside the Compose network; receiver and noVNC host ports bind to loopback.
