@@ -72,6 +72,9 @@ done only as part of the cutover.
 The command installer refuses to overwrite existing host commands. The reset
 command stops this Compose project before removing data and preserves the
 browser profile volume. `recognize-wav` requires a running worker container.
+`yougile-resolve --columns` reads YouGile settings from the receiver container,
+then saves selected column IDs into the protected host environment file. Run
+`yougile-restart` when ready to apply the changed scope to the receiver.
 
 ## State and backup
 

@@ -581,6 +581,7 @@ async def interactive_columns(
     input_fn: Callable[[str], str] = input,
     output: TextIO | None = None,
     save_column_ids: Callable[[list[str]], str] = add_allowed_column_ids,
+    emit_selection: bool = False,
 ) -> int:
     output = sys.stdout if output is None else output
     projects = await list_projects(get_json)
@@ -661,10 +662,16 @@ async def interactive_columns(
                             "x — отмена: ",
                         ).casefold()
                         if save_action == "1":
-                            assignment = save_column_ids(
-                                [column.column_id for column in selected]
-                            )
-                            print(f"Добавлено в env файл: {assignment}", file=output)
+                            selected_column_ids = [column.column_id for column in selected]
+                            if emit_selection:
+                                print(
+                                    "YOUGILE_RESOLVE_SELECTED_COLUMN_IDS="
+                                    + ",".join(selected_column_ids), file=output
+                                )
+                                print("Выбор передан для сохранения на хосте.", file=output)
+                            else:
+                                assignment = save_column_ids(selected_column_ids)
+                                print(f"Добавлено в env файл: {assignment}", file=output)
                             return 0
                         if save_action in {"x", "c", "cancel", "отмена"}:
                             print("Сохранение отменено. Никаких изменений не выполнено.", file=output)
@@ -780,7 +787,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def configure_client() -> None:
-    env = load_env()
+    env = os.environ if os.environ.get("YOUGILE_RESOLVE_CONTAINER") == "1" else load_env()
     api_key = env.get("YOUGILE_API_KEY", "")
     if not api_key:
         raise ResolveError("YOUGILE_API_KEY не задан в EnvironmentFile")
@@ -807,7 +814,9 @@ def configure_client() -> None:
 async def async_main(args: argparse.Namespace) -> int:
     if args.columns:
         configure_client()
-        return await interactive_columns()
+        return await interactive_columns(
+            emit_selection=os.environ.get("YOUGILE_RESOLVE_CONTAINER") == "1"
+        )
 
     task_references = []
     for index, link in enumerate(args.links, 1):
