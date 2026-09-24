@@ -27,6 +27,8 @@ htmlcov/
 /.agents/
 /.codex/
 /.playwright-mcp/
+/commands/
+/cisnet-playwright/node_modules/
 
 # Historical backups and scratch paths
 /backup/

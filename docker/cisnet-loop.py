@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Container-native replacement for the systemd CIS-Net timer."""
+"""Run periodic CIS-Net work inside the Compose runner container."""
 
 from __future__ import annotations
 
@@ -34,20 +34,24 @@ def main() -> int:
     interval = int(os.environ.get("CISNET_INTERVAL_SECONDS", "60"))
     if not 10 <= interval <= 3600:
         raise RuntimeError("CISNET_INTERVAL_SECONDS must be between 10 and 3600")
-    if not os.environ.get("CISNET_EMAIL") or not os.environ.get("CISNET_PASSWORD"):
+    execute = os.environ.get("CISNET_EXECUTE", "0") == "1"
+    if execute and (not os.environ.get("CISNET_EMAIL") or not os.environ.get("CISNET_PASSWORD")):
         raise RuntimeError("CIS-Net credentials are not configured")
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     thread = threading.Thread(target=heartbeat, name="cisnet-heartbeat", daemon=True)
     thread.start()
+    if not execute:
+        print("[WAIT] CIS-Net automation is disabled; set CISNET_EXECUTE=1 and recreate the container.", flush=True)
     try:
         while not STOP.is_set():
-            try:
-                state = cisnet_automation.run_pending()
-                if state:
-                    print(f"[CISNET] loop_state=error exit_code={state}", flush=True)
-            except Exception as error:
-                print(f"[CISNET] loop_error type={type(error).__name__}", flush=True)
+            if execute:
+                try:
+                    state = cisnet_automation.run_pending()
+                    if state:
+                        print(f"[CISNET] loop_state=error exit_code={state}", flush=True)
+                except Exception as error:
+                    print(f"[CISNET] loop_error type={type(error).__name__}", flush=True)
             STOP.wait(interval)
     finally:
         STOP.set()

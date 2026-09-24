@@ -1,156 +1,107 @@
-# Docker Compose: сборка и администрирование
+# Docker operations
 
-Комплект предназначен для нового сервера или staging. Он не переключает и не
-останавливает текущие systemd-сервисы.
-
-## Подготовка
-
-Нужны Docker Engine с Compose v2 и x86_64/glibc host. Репозитории должны лежать
-рядом:
-
-```text
-/opt/music-verifier
-/opt/cisnet-playwright
-```
-
-Если путь второго репозитория другой, измените только
-`CISNET_BUILD_CONTEXT` в рабочем EnvironmentFile.
-
-Корневой `.env` — отслеживаемый безопасный шаблон. Не редактируйте его на
-сервере. Создайте защищённый рабочий EnvironmentFile и заполните пустые поля:
-
-- `WEBHOOK_SECRET`, `YOUGILE_API_KEY`;
-- `ACR_ACCESS_KEY`, `ACR_SECRET_KEY` и затем `ACR_EXECUTE=1`;
-- `CISNET_EMAIL`, `CISNET_PASSWORD`;
-- `VNC_PASSWORD`.
+Run these commands from `/opt/music-verifier-docker`. Use a protected environment
+file such as `/etc/music-verifier.env`; `docker compose config` without `--quiet`
+can print credentials. The tracked `.env` is only a nonsecret template.
 
 ```bash
-sudo install -o root -g root -m 600 \
-  /opt/music-verifier/.env /etc/music-verifier.env
-sudoedit /etc/music-verifier.env
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env config --quiet
+cd /opt/music-verifier-docker
+docker compose --env-file /etc/music-verifier.env config --quiet
+docker compose --env-file /etc/music-verifier.env build
+# If preserving existing history, restore the stopped data snapshot now.
+docker compose --env-file /etc/music-verifier.env up -d
+docker compose --env-file /etc/music-verifier.env ps -a
+docker compose --env-file /etc/music-verifier.env logs --tail=100 receiver worker cisnet-runner cisnet-browser
 ```
 
-Не используйте обычный `docker compose config` в отчётах: после заполнения он
-может вывести секреты. `/etc/music-verifier.env` нельзя коммитить или помещать
-в image.
+`init-data` creates a clean SQLite database in an empty `music-data` volume. It
+also accepts a restored, unmarked volume after checking SQLite integrity, the
+current schema, and the CIS-Net baseline. It will not migrate an old schema or
+replace a missing database. `cisnet-profile` holds the browser profile.
+Both volumes survive container replacement. Never use `down -v` unless deleting
+all state is explicitly intended.
 
-## Сборка и первый запуск
+The image has five services: `init-data`, `receiver`, `worker`, `cisnet-browser`,
+and `cisnet-runner`. Receiver and worker share one data volume. CDP is reachable
+only inside the Compose network; receiver and noVNC host ports bind to loopback.
+The browser image is built from `./cisnet-playwright`, so this directory can be
+moved as one unit. Application container paths remain `/opt/music-verifier` and
+browser container paths remain `/opt/cisnet-playwright` regardless of host path.
+With the template environment, `YOUGILE_POLL_ENABLED=false`, `ACR_EXECUTE=0`,
+and `CISNET_EXECUTE=0` prevent automatic external processing on initial start.
 
-```bash
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env build --pull
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env up -d
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env ps
-```
-
-`init-data` первым создаёт named volume `music-verifier_music-data`. Первый
-запуск разрешён только для пустого volume. В нём создаются пустые каталоги и
-`queue/pipeline.sqlite3` со schema 12, CIS-Net baseline и нулём operational
-records. Старые WAV, результаты, сообщения и прогоны туда не копируются.
-Существующий host-каталог `/opt/music-verifier/data` в Compose не монтируется и
-этой процедурой не изменяется.
-
-Повторный запуск initializer не очищает существующие данные. Не используйте
-`docker compose down -v`: этот ключ удаляет persistent volumes.
-
-## Проверка
+## Checks
 
 ```bash
 curl --fail http://127.0.0.1:8080/health
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env ps
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env \
-  logs --tail=100 receiver worker cisnet-runner cisnet-browser
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env \
-  exec -T receiver python docker/healthcheck.py database
+docker compose --env-file /etc/music-verifier.env exec -T receiver python docker/healthcheck.py database
+docker compose --env-file /etc/music-verifier.env ps -a
 ```
 
-noVNC доступен по `http://127.0.0.1:6080/vnc.html`. Для удалённого доступа
-используйте SSH tunnel. Порты VNC `5900` и CDP `9223` на host не публикуются.
+noVNC is available at `http://127.0.0.1:6080/vnc.html` through a local session
+or SSH tunnel. Before a real cutover, validate image startup and the browser on
+a Docker host. This source server does not currently have Docker installed.
 
-Healthchecks проверяют receiver HTTP, SQLite, heartbeat CIS-Net runner, CDP и
-noVNC. Они не выполняют live-запросы в YouGile, ACRCloud или CIS-Net.
+## Operator commands
 
-## Операторские команды в Compose
-
-После клонирования установите Compose-native wrappers одной командой:
+`bin/yougile-compose` dispatches the `yougile-*` commands through Compose. For a
+local command directory, install symlinks without changing global commands:
 
 ```bash
-sudo /opt/music-verifier/bin/install-compose-commands
+YOUGILE_COMMAND_DIR=/opt/music-verifier-docker/commands \
+  /opt/music-verifier-docker/bin/install-compose-commands
 ```
 
-После этого `yougile-start`, `yougile-stop`, `yougile-restart`, `yougile-status`,
-`yougile-logs`, `yougile-httplogs`, `yougile-cisnetlogs`, `yougile-runs`,
-`yougile-resolve`, `yougile-cisnet`, `yougile-env`, `yougile-reset-data` и
-`recognize-wav` доступны из любой рабочей директории. Они используют
-`/etc/music-verifier.env` и `/opt/music-verifier` автоматически.
+The dispatcher finds this copy from its own location. It reads
+`/etc/music-verifier.env` by default and can be directed to a different
+protected file with `YOUGILE_ENV_FILE`. Global command installation should be
+done only as part of the cutover.
 
-Основные команды:
+| Previous command | Compose equivalent |
+| --- | --- |
+| `yougile-start`, `yougile-stop`, `yougile-restart` | Start the stack, stop application workers, or recreate application workers; the browser stays available on stop/restart |
+| `yougile-status [--full]` | Show container states; `--full` also shows processes |
+| `yougile-logs [--once\|--follow] [--all]` | Read redacted application and browser logs |
+| `yougile-httplogs [--once\|--follow]` | Read redacted YouGile HTTP events |
+| `yougile-cisnetlogs [--once\|--follow]` | Read CIS-Net container logs |
+| `yougile-runs`, `yougile-resolve`, `yougile-cisnet` | Run the corresponding CLI inside a container |
+| `recognize-wav -i FILE [--force]` | Copy the WAV temporarily into the worker and queue it |
+| `yougile-env` | Edit the protected host environment file |
+| `yougile-reset-data` | Print the plan; `--execute 'RESET MUSIC-VERIFIER DATA'` removes only the application data volume |
+
+The command installer refuses to overwrite existing host commands. The reset
+command stops this Compose project before removing data and preserves the
+browser profile volume. `recognize-wav` requires a running worker container.
+
+## State and backup
+
+The copy contains no production state or credentials. A fresh start creates a
+new database and browser profile. For existing history, stop all source writers
+first, then copy the *entire* source `data/` tree, including SQLite WAL/SHM,
+audio, runs, and results, to a protected directory on the target host. After
+building the image and before `up -d`, restore that directory into a new, empty
+volume. For the default image and project names:
 
 ```bash
-yougile-start
-yougile-stop
-yougile-restart
-yougile-status
-yougile-logs --follow
-yougile-cisnetlogs --follow
+set -o pipefail
+test -d /path/to/stopped-data-snapshot
+docker volume create music-verifier_music-data
+docker run --rm --user 0 \
+  -v music-verifier_music-data:/opt/music-verifier/data \
+  --entrypoint sh music-verifier:local \
+  -c 'test -z "$(ls -A /opt/music-verifier/data)"'
+tar -C /path/to/stopped-data-snapshot -cf - . |
+  docker run --rm -i --user 0 \
+    -v music-verifier_music-data:/opt/music-verifier/data \
+    --entrypoint tar music-verifier:local \
+    -C /opt/music-verifier/data -xf -
+docker compose --env-file /etc/music-verifier.env up -d
+docker compose --env-file /etc/music-verifier.env exec -T receiver \
+  python docker/healthcheck.py database
 ```
 
-Остальные созданные инструменты находятся в image и запускаются так:
-
-```bash
-# Интерактивный список и просмотр прогонов
-yougile-runs
-
-# Ручной WAV: файл копируется во временный tmpfs worker-контейнера
-recognize-wav /absolute/path/input.wav
-
-# Ручной CIS-Net поиск; session lock защищает от параллельного runner
-yougile-cisnet manual \
-  --title 'Название' --performer 'Исполнитель' --execute
-```
-
-`yougile-env` открывает `/etc/music-verifier.env`. `yougile-reset-data` требует
-точное подтверждение `RESET MUSIC-VERIFIER DATA` и удаляет persistent volume;
-не запускайте её в штатной эксплуатации. Команды `yougile_resolve.py`,
-`yougile_webhooks.py`, baseline и backfill остаются специальными
-live/migration-инструментами: перед их запуском требуется отдельная проверка
-scope и явное разрешение на изменение внешнего состояния.
-
-## Обновление
-
-```bash
-git pull --ff-only
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env build --pull
-sudo docker compose --project-directory /opt/music-verifier \
-  --env-file /etc/music-verifier.env up -d --remove-orphans
-yougile-status
-```
-
-Не запускайте Compose одновременно со старым systemd deployment: два receiver
-или worker могут повторно обработать события и потратить ACRCloud requests.
-
-## Данные и backup
-
-`music-data` содержит SQLite, WAL/SHM, WAV, recognition, aggregation и CIS-Net
-artifacts. `cisnet-profile` содержит browser profile и служебные настройки
-desktop-home. Остановка или пересоздание контейнеров volumes не удаляет.
-
-Для согласованного backup сначала требуется отдельное окно остановки всех
-writers. Архивируйте весь `music-data`, а не один `pipeline.sqlite3`; секретный
-`/etc/music-verifier.env` храните отдельным защищённым архивом. Перед
-восстановлением проверяйте SHA-256, ownership, `PRAGMA quick_check` и foreign
-keys.
-
-## Ограничения текущей проверки
-
-На исходном сервере Docker Engine отсутствует. Поэтому Dockerfile/Compose
-проверены статически, Python/Node/shell tests выполняются на host, но фактическая
-сборка images и staging smoke должны быть выполнены на Docker host до cutover.
+Run this only against an empty volume. On first start, `init-data` verifies the
+restored database before it creates its marker and adjusts file ownership. A
+failed schema or integrity check leaves the application stopped. The browser
+profile and environment file need separate protected backups. Never start two
+workers or pollers for the same scope at once.

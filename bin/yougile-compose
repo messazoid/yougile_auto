@@ -2,7 +2,8 @@
 
 set -Eeuo pipefail
 
-REPO_ROOT="${YOUGILE_REPO_ROOT:-/opt/music-verifier}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd -P)"
+REPO_ROOT="${YOUGILE_REPO_ROOT:-$(dirname -- "$SCRIPT_DIR")}"
 ENV_FILE="${YOUGILE_ENV_FILE:-/etc/music-verifier.env}"
 PROJECT_DIR="$REPO_ROOT"
 PROJECT_NAME="${YOUGILE_PROJECT_NAME:-music-verifier}"
@@ -41,48 +42,80 @@ exec_compose() {
   exec "${COMPOSE_COMMAND[@]}" "$@"
 }
 
+exec_cli() {
+  if [[ -t 0 && -t 1 ]]; then
+    exec_compose exec "$@"
+  else
+    exec_compose exec -T "$@"
+  fi
+}
+
 command_name="$(basename "$0")"
 
 case "$command_name" in
   yougile-start)
+    [[ "$#" -eq 0 ]] || { echo "Usage: yougile-start" >&2; exit 2; }
     exec_compose up -d
     ;;
   yougile-stop)
-    exec_compose stop
+    [[ "$#" -eq 0 ]] || { echo "Usage: yougile-stop" >&2; exit 2; }
+    exec_compose stop receiver worker cisnet-runner
     ;;
   yougile-restart)
-    exec_compose up -d --force-recreate receiver worker cisnet-browser cisnet-runner
+    [[ "$#" -eq 0 ]] || { echo "Usage: yougile-restart" >&2; exit 2; }
+    exec_compose up -d --force-recreate receiver worker cisnet-runner
     ;;
   yougile-status)
-    exec_compose ps -a
+    case "${1:-}" in
+      "") [[ "$#" -eq 0 ]] || { echo "Usage: yougile-status [--full]" >&2; exit 2; }
+          exec_compose ps -a ;;
+      --full) [[ "$#" -eq 1 ]] || { echo "Usage: yougile-status [--full]" >&2; exit 2; }
+          compose ps -a
+          compose top ;;
+      -h|--help) echo "Usage: yougile-status [--full]" ;;
+      *) echo "Usage: yougile-status [--full]" >&2; exit 2 ;;
+    esac
     ;;
   yougile-logs)
     follow=1
+    all=0
     for argument in "$@"; do
       case "$argument" in
         --once) follow=0 ;;
         --follow) follow=1 ;;
-        *) echo "Usage: yougile-logs [--follow|--once]" >&2; exit 2 ;;
+        --all) all=1 ;;
+        *) echo "Usage: yougile-logs [--follow|--once] [--all]" >&2; exit 2 ;;
       esac
     done
+    view_options=()
+    [[ "$all" -eq 1 ]] && view_options+=(--all)
     if [[ "$follow" -eq 1 ]]; then
-      exec_compose logs --tail=100 --follow receiver worker cisnet-runner cisnet-browser
+      compose logs --no-color --tail=100 --follow receiver worker cisnet-runner cisnet-browser |
+        python3 "$REPO_ROOT/docker/compose_logs.py" "${view_options[@]}"
+    else
+      compose logs --no-color --tail=200 receiver worker cisnet-runner cisnet-browser |
+        python3 "$REPO_ROOT/docker/compose_logs.py" "${view_options[@]}"
     fi
-    exec_compose logs --tail=200 receiver worker cisnet-runner cisnet-browser
     ;;
   yougile-httplogs)
     follow=1
+    all=0
     for argument in "$@"; do
       case "$argument" in
         --once) follow=0 ;;
         --follow) follow=1 ;;
-        *) echo "Usage: yougile-httplogs [--follow|--once]" >&2; exit 2 ;;
+        --all) all=1 ;;
+        *) echo "Usage: yougile-httplogs [--follow|--once] [--all]" >&2; exit 2 ;;
       esac
     done
+    view_options=(--http-only)
+    [[ "$all" -eq 1 ]] && view_options+=(--all)
     if [[ "$follow" -eq 1 ]]; then
-      compose logs --tail=100 --follow receiver | grep --line-buffered '\[YOUGILE-HTTP\]'
+      compose logs --no-color --tail=100 --follow receiver |
+        python3 "$REPO_ROOT/docker/compose_logs.py" "${view_options[@]}"
     else
-      compose logs --tail=200 receiver | grep '\[YOUGILE-HTTP\]'
+      compose logs --no-color --tail=200 receiver |
+        python3 "$REPO_ROOT/docker/compose_logs.py" "${view_options[@]}"
     fi
     ;;
   yougile-cisnetlogs)
@@ -95,38 +128,55 @@ case "$command_name" in
       esac
     done
     if [[ "$follow" -eq 1 ]]; then
-      exec_compose logs --tail=100 --follow cisnet-runner cisnet-browser
+      compose logs --no-color --tail=100 --follow cisnet-runner cisnet-browser |
+        python3 "$REPO_ROOT/docker/compose_logs.py" --all
+    else
+      compose logs --no-color --tail=200 cisnet-runner cisnet-browser |
+        python3 "$REPO_ROOT/docker/compose_logs.py" --all
     fi
-    exec_compose logs --tail=200 cisnet-runner cisnet-browser
     ;;
   yougile-runs)
-    exec_compose exec receiver python src/yougile_runs.py "$@"
+    exec_cli receiver python src/yougile_runs.py "$@"
     ;;
   yougile-resolve)
-    exec_compose exec receiver python src/yougile_resolve.py "$@"
+    exec_cli receiver python src/yougile_resolve.py "$@"
     ;;
   yougile-cisnet)
-    exec_compose exec cisnet-runner python docker/cisnet-wrapper.py "$@"
+    exec_cli cisnet-runner python docker/cisnet-wrapper.py "$@"
     ;;
   recognize-wav)
     if [[ "$#" -lt 1 ]]; then
-      echo "Usage: recognize-wav INPUT.wav [options]" >&2
+      echo "Usage: recognize-wav [-i] INPUT.wav [--force]" >&2
+      exit 2
+    fi
+    if [[ "${1:-}" == "-i" || "${1:-}" == "--input" ]]; then
+      shift
+    fi
+    if [[ "$#" -lt 1 || ! -f "$1" ]]; then
+      echo "recognize-wav: input WAV is unavailable" >&2
       exit 2
     fi
     input="$1"
     shift
     name="$(basename -- "$input")"
-    remote="/tmp/$name"
+    remote="/tmp/yougile-manual-${BASHPID}-${name}"
+    trap 'compose exec -T -u 0 worker rm -f -- "$remote" >/dev/null 2>&1 || true' EXIT
     compose cp "$input" "worker:$remote"
-    exec_compose exec worker python src/recognize_wav.py "$remote" "$@"
+    compose exec -T -u 0 worker chmod 0644 -- "$remote"
+    compose exec -T worker python src/recognize_wav.py -i "$remote" "$@"
     ;;
   yougile-env)
     exec sudoedit "$ENV_FILE"
     ;;
   yougile-reset-data)
-    if [[ "${1:-}" != "RESET MUSIC-VERIFIER DATA" ]]; then
-      echo "This removes the persistent music-data volume." >&2
-      echo "Usage: yougile-reset-data 'RESET MUSIC-VERIFIER DATA'" >&2
+    if [[ "$#" -eq 0 || ( "$#" -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ) ]]; then
+      echo "Plan: stop this Compose project and permanently remove ${PROJECT_NAME}_music-data."
+      echo "The CIS-Net browser profile volume remains intact."
+      echo "Usage: yougile-reset-data --execute 'RESET MUSIC-VERIFIER DATA'"
+      exit 0
+    fi
+    if [[ "$#" -ne 2 || "$1" != "--execute" || "$2" != "RESET MUSIC-VERIFIER DATA" ]]; then
+      echo "Usage: yougile-reset-data --execute 'RESET MUSIC-VERIFIER DATA'" >&2
       exit 2
     fi
     compose down --remove-orphans

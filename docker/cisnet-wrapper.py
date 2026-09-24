@@ -14,7 +14,8 @@ import cisnet_cli
 
 
 def main(argv: list[str]) -> int:
-    if not os.environ.get("CISNET_EMAIL") or not os.environ.get("CISNET_PASSWORD"):
+    execute = any(argument in {"--execute", "--exe"} for argument in argv)
+    if execute and (not os.environ.get("CISNET_EMAIL") or not os.environ.get("CISNET_PASSWORD")):
         print("yougile-cisnet: CIS-Net credentials are not configured", file=sys.stderr)
         return 2
     endpoint = os.environ.get("CISNET_CDP_ENDPOINT", "")
@@ -30,12 +31,13 @@ def main(argv: list[str]) -> int:
         except BlockingIOError:
             print("yougile-cisnet: another CIS-Net search is running", file=sys.stderr)
             return 75
-        try:
-            with urlopen(urljoin(endpoint.rstrip("/") + "/", "json/version"), timeout=3):
-                pass
-        except OSError:
-            print("yougile-cisnet: CIS-Net browser is unavailable", file=sys.stderr)
-            return 2
+        if execute:
+            try:
+                with urlopen(urljoin(endpoint.rstrip("/") + "/", "json/version"), timeout=3):
+                    pass
+            except OSError:
+                print("yougile-cisnet: CIS-Net browser is unavailable", file=sys.stderr)
+                return 2
         return cisnet_cli.main(argv)
 
 

@@ -1,0 +1,31 @@
+# Secrets and local environment files
+.env
+.env.*
+!/.env
+!.env.example
+!*.env.example
+/config/.env
+
+# Installed dependencies and browser state
+/node_modules/
+/.cache/
+/cdp-profile/
+
+# Playwright diagnostics and local tooling
+/.playwright-mcp/
+/.agents/
+/.codex/
+playwright-report/
+test-results/
+
+# Historical backups and generated output
+/backup/
+/backup-*/
+*.backup-*
+*.bak
+*.orig
+*.rej
+*.log
+*.png
+*.jpg
+*.jpeg

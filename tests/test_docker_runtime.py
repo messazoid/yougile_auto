@@ -32,13 +32,38 @@ class DockerRuntimeTests(unittest.TestCase):
                 init_data.initialize_data(root, os.getuid(), os.getgid()), database
             )
 
-    def test_initializer_refuses_unmarked_nonempty_directory(self):
+    def test_initializer_imports_verified_existing_database_without_resetting_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "data"
+            database = init_data.initialize_data(root, os.getuid(), os.getgid())
+            with sqlite3.connect(database) as db:
+                db.execute("CREATE TABLE retained_history (value TEXT)")
+                db.execute("INSERT INTO retained_history VALUES ('keep')")
+            (root / init_data.MARKER).unlink()
+            self.assertEqual(init_data.initialize_data(root, os.getuid(), os.getgid()), database)
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute("SELECT value FROM retained_history").fetchone()[0], "keep")
+            self.assertTrue((root / init_data.MARKER).is_file())
+
+    def test_initializer_refuses_unmarked_nonempty_directory_without_database(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "data"
             root.mkdir()
             (root / "old-result.json").write_text("{}", encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, "non-empty unmarked"):
+            with self.assertRaisesRegex(RuntimeError, "without pipeline.sqlite3"):
                 init_data.initialize_data(root, os.getuid(), os.getgid())
+
+    def test_initializer_refuses_unmarked_database_with_wrong_schema(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "data"
+            database = root / "queue" / "pipeline.sqlite3"
+            database.parent.mkdir(parents=True)
+            with sqlite3.connect(database) as db:
+                db.execute("CREATE TABLE schema_info (id INTEGER, version INTEGER)")
+                db.execute("INSERT INTO schema_info VALUES (1, 1)")
+            with self.assertRaisesRegex(RuntimeError, "unexpected schema"):
+                init_data.initialize_data(root, os.getuid(), os.getgid())
+            self.assertFalse((root / init_data.MARKER).exists())
 
     def test_initializer_does_not_recreate_missing_database(self):
         with tempfile.TemporaryDirectory() as temporary:
