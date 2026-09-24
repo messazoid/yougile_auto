@@ -296,6 +296,12 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertNotIn('user: "1000:1000"', compose_text)
         self.assertNotIn("init: true", compose_text)
 
+    def test_cisnet_runner_uses_browser_loopback_for_cdp(self):
+        compose_text = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
+        runner = compose_text.split("  cisnet-runner:\n", 1)[1].split("\nvolumes:\n", 1)[0]
+        self.assertIn('network_mode: "service:cisnet-browser"', runner)
+        self.assertIn('CISNET_CDP_ENDPOINT: http://127.0.0.1:9223', runner)
+
 
 if __name__ == "__main__":
     unittest.main()

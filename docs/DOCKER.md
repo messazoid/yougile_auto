@@ -46,7 +46,9 @@ the profile data, session, and the `music-data` volume untouched.
 
 The image has five services: `init-data`, `receiver`, `worker`, `cisnet-browser`,
 and `cisnet-runner`. Receiver and worker share one data volume. CDP is reachable
-only inside the Compose network; receiver and noVNC host ports bind to loopback.
+only on the browser container's loopback; the runner shares that container's
+network namespace and connects to `127.0.0.1:9223`. Its health check verifies
+that CDP is reachable there. Receiver and noVNC host ports bind to loopback.
 The browser image is built from `./cisnet-playwright`, so this directory can be
 moved as one unit. Application container paths remain `/opt/music-verifier` and
 browser container paths remain `/opt/cisnet-playwright` regardless of host path.
