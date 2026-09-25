@@ -103,6 +103,8 @@ services:
   worker:
     <<: *music-common
     command: ["python", "docker/worker-entrypoint.py"]
+    dns:
+      - 1.1.1.1
     environment:
       ACR_HOST: ${ACR_HOST:-identify-eu-west-1.acrcloud.com}
       ACR_ACCESS_KEY: ${ACR_ACCESS_KEY:-}

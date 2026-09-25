@@ -161,8 +161,8 @@ docker compose --env-file /etc/music-verifier.env ps -a
 ```
 
 Check a known existing run with `yougile-runs show RUN_ID`. Keep the old named volume as a
-rollback copy; do not remove it during migration. The local
-`compose.override.yaml` still applies, including any DNS setting for `worker`.
+rollback copy; do not remove it during migration. The `worker` DNS setting is
+defined in `compose.yaml`.
 If startup fails after migration,
 remove `MUSIC_DATA_SOURCE=./data` from the protected environment file and run
 `docker compose --env-file /etc/music-verifier.env up -d`; this reattaches the
