@@ -106,6 +106,25 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._captured_calls()[0][-2:], ["ps", "-a"])
 
+    def test_runs_passes_host_bind_path_only_for_bind_mount(self):
+        self._set_bind_mount('/srv/music/data')
+        result = self._run_command('yougile-runs', 'show', 'S1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self._captured_calls()
+        self.assertEqual(calls[0][-3:], ['config', '--format', 'json'])
+        self.assertEqual(calls[1][-8:], [
+            '-T', '-e', 'YOUGILE_DISPLAY_DATA_ROOT=/srv/music/data',
+            'receiver', 'python', 'src/yougile_runs.py', 'show', 'S1',
+        ])
+
+    def test_runs_keeps_container_paths_for_named_volume(self):
+        result = self._run_command('yougile-runs', 'show', 'S1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self._captured_calls()
+        self.assertEqual(calls[0][-3:], ['config', '--format', 'json'])
+        self.assertEqual(calls[1][-5:], ['receiver', 'python', 'src/yougile_runs.py', 'show', 'S1'])
+        self.assertNotIn('-e', calls[1])
+
     def test_full_status_includes_container_processes(self):
         result = self._run_command("yougile-status", "--full")
         self.assertEqual(result.returncode, 0, result.stderr)

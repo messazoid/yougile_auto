@@ -227,7 +227,25 @@ class RunConsole:
         self.runs_root = self.data_root / "recognition-runs"
         self.aggregation_root = self.data_root / "aggregation"
         self.trash_root = self.data_root / ".trash"
+        display_root = os.environ.get("YOUGILE_DISPLAY_DATA_ROOT")
+        if display_root and not Path(display_root).is_absolute():
+            raise RunConsoleError("YOUGILE_DISPLAY_DATA_ROOT must be absolute")
+        self.display_root = Path(display_root) if display_root else None
         self.store = PipelineStore(self.database)
+
+    def display_path(self, value: str | Path | None) -> str | None:
+        if not value:
+            return None
+        path = Path(value)
+        if self.display_root:
+            absolute = path if path.is_absolute() else Path.cwd() / path
+            try:
+                relative = absolute.relative_to(self.data_root.absolute())
+            except ValueError:
+                pass
+            else:
+                return str(self.display_root / relative)
+        return str(path)
 
     def connect_readonly(self) -> sqlite3.Connection:
         connection = sqlite3.connect(f"{self.database.as_uri()}?mode=ro", uri=True)
@@ -460,7 +478,7 @@ class RunConsole:
                     latest = scan.execute(latest_query, (limit,)).fetchall()
                 else:
                     latest = scan.execute(latest_query).fetchall()
-            print(f"Scan database: {path}")
+            print(f"Scan database: {self.display_path(path)}")
             print(f"Integrity: {quick_check}")
             print("States:", ", ".join(f"{state}={count}" for state, count in states))
             print("Responses:", ", ".join(f"HTTP {http_status}/ACR {acr_code}={count}" for http_status, acr_code, count in responses))
@@ -472,7 +490,7 @@ class RunConsole:
             path = self._safe_path(str(result_dir / "responses.jsonl"), self.runs_root)
             if not path:
                 raise RunConsoleError("responses.jsonl is unavailable")
-            print(f"Responses log: {path}")
+            print(f"Responses log: {self.display_path(path)}")
             with path.open(encoding="utf-8") as handle:
                 for number, line in enumerate(handle, 1):
                     if limit is not None and number > limit:
@@ -506,7 +524,7 @@ class RunConsole:
             if not path:
                 raise RunConsoleError("Aggregation result.json is unavailable")
             result = json.loads(path.read_text(encoding="utf-8"))
-            print(f"Aggregation result: {path}")
+            print(f"Aggregation result: {self.display_path(path)}")
             if raw:
                 print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
                 return
@@ -588,17 +606,17 @@ def _display_detail(console: RunConsole, source_id: int) -> None:
     recognition = detail["recognition"]
     print(f"Source job: S{source['id']} ({source['stage']})")
     print(f"Source file: {_name_with_size(source['source_filename'], source['source_size'])}")
-    print(f"WAV: {_name_with_size(source['wav_path'], source['wav_size'])}")
+    print(f"WAV: {_name_with_size(console.display_path(source['wav_path']), source['wav_size'])}")
     if source["wav_deleted_utc"]:
         print(f"WAV archived: {source['wav_deleted_utc']}")
     print(f"Yandex Disk: {_public_yandex_link(source['source_url']) or '[not a safe public Yandex link]'}")
     if recognition:
         print(f"Recognition: R{recognition['id']} ({recognition['state']})")
-        print(f"Raw database: {Path(recognition['result_dir']) / 'scan.sqlite3'}")
-        print(f"Responses log: {Path(recognition['result_dir']) / 'responses.jsonl'}")
+        print(f"Raw database: {console.display_path(Path(recognition['result_dir']) / 'scan.sqlite3')}")
+        print(f"Responses log: {console.display_path(Path(recognition['result_dir']) / 'responses.jsonl')}")
         for aggregation in detail["aggregation"]:
             export = console.aggregation_root / f"{recognition['id']}_{aggregation['id']}"
-            print(f"Aggregation A{aggregation['id']} ({aggregation['state']}): {export / 'result.json'}")
+            print(f"Aggregation A{aggregation['id']} ({aggregation['state']}): {console.display_path(export / 'result.json')}")
         if recognition["results_deleted_utc"]:
             print(f"Results archived: {recognition['results_deleted_utc']}")
     else:
@@ -622,7 +640,7 @@ def _archive_command(console: RunConsole, selector: int, mode: str, confirmation
     destinations = console.archive(selector, mode)
     print("Archived:")
     for destination in destinations:
-        print(destination)
+        print(console.display_path(destination))
     return 0
 
 
@@ -988,8 +1006,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    console = RunConsole(args.db, args.company_id)
     try:
+        console = RunConsole(args.db, args.company_id)
         if args.command is None:
             if not sys.stdin.isatty():
                 parser.error("choose a command when stdin is not interactive")

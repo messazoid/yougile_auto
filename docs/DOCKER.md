@@ -96,9 +96,15 @@ done only as part of the cutover.
 | `yougile-httplogs [--once\|--follow]` | Read redacted YouGile HTTP events |
 | `yougile-cisnetlogs [--once\|--follow]` | Read CIS-Net container logs |
 | `yougile-runs`, `yougile-resolve`, `yougile-cisnet` | Run the corresponding CLI inside a container |
+
 | `recognize-wav -i FILE [--force]` | Copy the WAV temporarily into the worker and queue it |
 | `yougile-env` | Edit the protected host environment file |
 | `yougile-reset-data` | Print the plan; `--execute 'RESET MUSIC-VERIFIER DATA'` clears active application data after checking its mount |
+
+When application data uses a bind mount, `yougile-runs` displays the host paths
+for WAV, scan, response, aggregation, and archived files. It still reads and
+updates those files through the container mount. With a named volume, it shows
+the container paths because there is no checkout path for that volume.
 
 The command installer refuses to overwrite existing host commands. The reset
 command stops the Compose stack, then empties only this checkout's active `data/`

@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from job_store import PipelineStore, utcnow
-from yougile_runs import RunConsole, RunConsoleError, TerminalScreen, _display_list, main
+from yougile_runs import RunConsole, RunConsoleError, TerminalScreen, _display_detail, _display_list, main
 
 
 class YougileRunsTests(unittest.TestCase):
@@ -71,6 +71,29 @@ class YougileRunsTests(unittest.TestCase):
         self.assertIn("source.mp4 (2.0 KiB)", text)
         self.assertIn(f"{self.audio} (3.0 KiB)", text)
         self.assertTrue(self.audio.exists())
+
+    def test_show_and_view_display_host_bind_paths_without_changing_reads(self):
+        host_data = Path('/srv/music/data')
+        with patch.dict(os.environ, {'YOUGILE_DISPLAY_DATA_ROOT': str(host_data)}):
+            console = RunConsole(self.store.path)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                _display_detail(console, 1)
+                console.view(1, 'responses')
+                console.view(1, 'aggregation')
+        text = output.getvalue()
+        self.assertIn(str(host_data / 'audio' / 'sample.wav'), text)
+        self.assertIn(str(host_data / 'recognition-runs' / 'sample' / 'scan.sqlite3'), text)
+        self.assertIn(str(host_data / 'recognition-runs' / 'sample' / 'responses.jsonl'), text)
+        self.assertIn(str(host_data / 'aggregation' / '1_1' / 'result.json'), text)
+        self.assertNotIn(str(self.root / 'audio'), text)
+        self.assertTrue(self.audio.exists())
+
+    def test_display_path_leaves_other_paths_and_named_volume_mode_alone(self):
+        self.assertEqual(self.console.display_path(self.audio), str(self.audio))
+        with patch.dict(os.environ, {'YOUGILE_DISPLAY_DATA_ROOT': '/srv/music/data'}):
+            console = RunConsole(self.store.path)
+        self.assertEqual(console.display_path('/tmp/other.wav'), '/tmp/other.wav')
 
     def test_read_connection_is_query_only(self):
         with self.console.connect_readonly() as db:
