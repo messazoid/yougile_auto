@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { chromium } = require('playwright');
+const { chromium } = require('patchright');
 const { configureProfile } = require('./configure-profile');
 
 const CDP_PORT = Number.parseInt(process.env.CISNET_CDP_PORT || '9223', 10);

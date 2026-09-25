@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "playwright": "1.62.1"
+    "patchright": "1.62.1"
   }
 }

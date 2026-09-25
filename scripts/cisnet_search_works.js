@@ -6,9 +6,9 @@
  */
 
 const fs = require('fs');
-const playwrightModule = process.env.CISNET_PLAYWRIGHT_MODULE
-  || '/opt/cisnet-playwright/node_modules/playwright';
-const { chromium } = require(playwrightModule);
+const browserAutomationModule = process.env.CISNET_PLAYWRIGHT_MODULE
+  || '/opt/cisnet-playwright/node_modules/patchright';
+const { chromium } = require(browserAutomationModule);
 
 const CDP_ENDPOINT = process.env.CISNET_CDP_ENDPOINT || 'http://127.0.0.1:9223';
 const NO_RESULTS = 'No results were found for this request.';
@@ -59,6 +59,19 @@ async function single(locator, description) {
   const count = await locator.count();
   if (count !== 1) throw new AdapterError('ELEMENT_COUNT', `${description}: expected one element, found ${count}`);
   return locator;
+}
+
+async function waitForResults(watcher) {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    // Keep evaluation in the handle's execution context. Patchright may use
+    // different isolated contexts for evaluate() and waitForFunction().
+    if (await watcher.evaluate(state => state.ready())) return;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  const error = new Error('CIS-Net results did not settle within 30000 ms');
+  error.name = 'TimeoutError';
+  throw error;
 }
 
 async function pageInSharedBrowser() {
@@ -327,10 +340,9 @@ async function main() {
   begin('search.submit');
   const search = page.locator('.v-button-primary:visible').filter({ hasText: /^Search$/ });
   if (await search.count() !== 1) throw new Error('CIS-Net Search button is ambiguous or unavailable');
-  await page.evaluate((message) => {
-    window.__cisnetResultMutationAt = 0;
-    window.__cisnetResultObserver?.disconnect();
-    window.__cisnetResultObserver = new MutationObserver((mutations) => {
+  const resultsWatcher = await page.evaluateHandle((message) => {
+    let mutationAt = 0;
+    const observer = new MutationObserver((mutations) => {
       const touchesResults = (node) => {
         if (node.nodeType !== Node.ELEMENT_NODE) return false;
         return node.id === 'mwiResultLayoutPrint' || node.matches?.('#mwiResultLayoutPrint *')
@@ -338,19 +350,21 @@ async function main() {
           || node.textContent?.includes(message);
       };
       if (mutations.some((mutation) => [mutation.target, ...mutation.addedNodes, ...mutation.removedNodes].some(touchesResults))) {
-        window.__cisnetResultMutationAt = Date.now();
+        mutationAt = Date.now();
       }
     });
-    window.__cisnetResultObserver.observe(document.body, { childList: true, characterData: true, subtree: true });
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+    return {
+      ready: () => mutationAt > 0 && Date.now() - mutationAt >= 1000
+        && Boolean(document.body.innerText.includes(message) || document.querySelector('#mwiResultLayoutPrint')),
+      disconnect: () => observer.disconnect(),
+    };
   }, NO_RESULTS);
   try {
     await search.click();
     done();
     begin('search.wait_results');
-    await page.waitForFunction((message) => window.__cisnetResultMutationAt > 0
-      && Date.now() - window.__cisnetResultMutationAt >= 1000
-      && (document.body.innerText.includes(message) || document.querySelector('#mwiResultLayoutPrint')),
-    NO_RESULTS, { timeout: 30000 });
+    await waitForResults(resultsWatcher);
     await page.waitForLoadState('networkidle', { timeout: 15000 });
     done();
     begin('search.capture');
@@ -361,7 +375,8 @@ async function main() {
     done();
     fs.writeSync(1, `${JSON.stringify(result)}\n`);
   } finally {
-    await page.evaluate(() => window.__cisnetResultObserver?.disconnect()).catch(() => {});
+    await resultsWatcher.evaluate(state => state.disconnect()).catch(() => {});
+    await resultsWatcher.dispose().catch(() => {});
   }
 }
 

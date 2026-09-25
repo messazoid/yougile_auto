@@ -12,6 +12,7 @@ RUN apt-get update \
 WORKDIR /opt/cisnet-playwright
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts \
+    && npx --no-install patchright install chromium --no-shell \
     && npm cache clean --force
 COPY launch-cdp.js configure-profile.js cisnet-desktop.sh container-entrypoint.sh container-healthcheck.sh ./
 RUN install -d -o pwuser -g pwuser -m 0700 \

@@ -178,7 +178,7 @@ services:
       CISNET_EMAIL: ${CISNET_EMAIL:-}
       CISNET_PASSWORD: ${CISNET_PASSWORD:-}
       CISNET_CDP_ENDPOINT: http://127.0.0.1:9223
-      CISNET_PLAYWRIGHT_MODULE: /opt/music-verifier/node_modules/playwright
+      CISNET_PLAYWRIGHT_MODULE: /opt/music-verifier/node_modules/patchright
       CISNET_ADAPTER_CWD: /opt/music-verifier
       CISNET_WRAPPER: /opt/music-verifier/docker/cisnet-wrapper.py
       CISNET_INTERVAL_SECONDS: ${CISNET_INTERVAL_SECONDS:-60}
