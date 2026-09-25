@@ -15,6 +15,8 @@ Music Verifier обрабатывает аудио и видео из YouGile, �
 
 Нужны Git, Docker Engine и плагин Docker Compose.
 
+Установка: [Docker Engine](https://docs.docker.com/engine/install/) и [плагин Docker Compose](https://docs.docker.com/compose/install/linux/).
+
 1. Склонируйте проект с GitHub и перейдите в его каталог:
 
    ```bash
