@@ -148,6 +148,22 @@ manual-browser control, external site classifier, TLS fingerprint, or IP
 reputation test. Browser versions can differ. Generated reports stay in the
 Git-ignored `tmp/` directory.
 
+To inspect the **running** CIS-Net browser, first make sure the runner is idle,
+then run the following from the repository root. The command opens and closes
+one temporary loopback tab in the existing browser. It does not navigate the
+CIS-Net tab, read cookies, or send the report to an external service.
+
+```bash
+mkdir -p tmp/browser-diagnostics
+docker compose --env-file /etc/music-verifier.env exec -T cisnet-runner \
+  node scripts/diagnose-live.js > tmp/browser-diagnostics/live.json
+```
+
+`checks` compares the observed locale, request language, timezone, screen size,
+HTTP user agent, and iframe navigator with their expected values. A failed check
+is a configuration mismatch to investigate; passing checks do not establish
+whether any website identifies the browser as automated.
+
 To verify the actual adapter with Chrome against the offline fixture:
 
 ```bash

@@ -37,4 +37,8 @@ docs
 deploy
 README.md
 AGENTS.md
-cisnet-playwright
+cisnet-playwright/*
+!cisnet-playwright/diagnose-live.js
+!cisnet-playwright/diagnose-browsers.js
+!cisnet-playwright/browser-environment.js
+!cisnet-playwright/configure-profile.js

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-const { chromium } = require('patchright');
 const { configureProfile } = require('./configure-profile');
 const { readBrowserEnvironment } = require('./browser-environment');
 const { execFile } = require('node:child_process');
@@ -127,6 +126,25 @@ async function listen(server) {
   return server.address().port;
 }
 
+function createProbeServer() {
+  return http.createServer((request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
+    if (request.url === '/headers') {
+      const allowed = ['user-agent', 'accept-language', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'];
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify(Object.fromEntries(allowed.map(key => [key, request.headers[key] ?? null]))));
+    } else {
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.end(pageHtml);
+    }
+  });
+}
+
+async function closeProbeServer(server) {
+  server.closeAllConnections();
+  await new Promise(resolve => server.close(resolve));
+}
+
 async function freePort() {
   const server = net.createServer();
   const port = await listen(server);
@@ -135,6 +153,7 @@ async function freePort() {
 }
 
 async function collectWithRunner(endpoint, url) {
+  const { chromium } = require('patchright');
   // A separate process models the production CDP runner and disconnects by
   // exiting, without closing the browser owned by the launcher.
   const browser = await chromium.connectOverCDP(endpoint);
@@ -146,19 +165,10 @@ async function collectWithRunner(endpoint, url) {
 }
 
 async function compare() {
+  const { chromium } = require('patchright');
   const environment = readBrowserEnvironment();
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'cisnet-diagnostics-'));
-  const server = http.createServer((request, response) => {
-    response.setHeader('Cache-Control', 'no-store');
-    if (request.url === '/headers') {
-      const allowed = ['user-agent', 'accept-language', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'];
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify(Object.fromEntries(allowed.map(key => [key, request.headers[key] ?? null]))));
-    } else {
-      response.setHeader('Content-Type', 'text/html; charset=utf-8');
-      response.end(pageHtml);
-    }
-  });
+  const server = createProbeServer();
   const report = {
     schema: 'cisnet-browser-diagnostics/v1',
     capturedAt: new Date().toISOString(),
@@ -212,16 +222,19 @@ async function compare() {
     report.browserDifferences = differences(report.browsers.chromium.afterRunner, report.browsers.chrome.afterRunner);
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
   } finally {
-    server.closeAllConnections();
-    await new Promise(resolve => server.close(resolve));
+    await closeProbeServer(server);
     await fs.rm(temporary, { recursive: true, force: true });
   }
 }
 
-(process.argv[2] === '--runner'
-  ? collectWithRunner(process.argv[3], process.argv[4]) : compare()
-).catch(error => {
-  console.error(error);
-  if (process.argv[2] === '--runner') process.exit(1);
-  process.exitCode = 1;
-});
+module.exports = { createProbeServer, closeProbeServer, listen, readSnapshot, differences };
+
+if (require.main === module) {
+  (process.argv[2] === '--runner'
+    ? collectWithRunner(process.argv[3], process.argv[4]) : compare()
+  ).catch(error => {
+    console.error(error);
+    if (process.argv[2] === '--runner') process.exit(1);
+    process.exitCode = 1;
+  });
+}
