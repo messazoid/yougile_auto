@@ -283,6 +283,18 @@ class ComposeCommandTests(unittest.TestCase):
         self.assertEqual(calls[2][-1], "--force")
         self.assertEqual(calls[3][-4:-2], ["rm", "-f"])
 
+    def test_env_rejects_extra_arguments_without_opening_editor(self):
+        marker = self.root / "editor-opened"
+        self.environment["EDITOR_MARKER"] = str(marker)
+        self._write_executable(
+            self.fake_bin / "sudoedit",
+            '#!/usr/bin/env bash\ntouch "$EDITOR_MARKER"\n',
+        )
+        result = self._run_command("yougile-env", "--unexpected")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Usage: yougile-env", result.stderr)
+        self.assertFalse(marker.exists())
+
     def test_installer_creates_only_expected_symlinks(self):
         target = self.root / "commands"
         environment = self.environment | {

@@ -201,6 +201,7 @@ if mount.get("type") == "bind" and isinstance(source, str) and os.path.isabs(sou
     compose exec -T worker python src/recognize_wav.py -i "$remote" "$@"
     ;;
   yougile-env)
+    [[ "$#" -eq 0 ]] || { echo "Usage: yougile-env" >&2; exit 2; }
     exec sudoedit "$ENV_FILE"
     ;;
   yougile-reset-data)
