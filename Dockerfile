@@ -33,6 +33,7 @@ COPY --from=python-deps /opt/venv /opt/venv
 WORKDIR /opt/music-verifier
 COPY --chown=${APP_UID}:${APP_GID} src ./src
 COPY --chown=${APP_UID}:${APP_GID} scripts/cisnet_search_works.js ./scripts/cisnet_search_works.js
+COPY --chown=${APP_UID}:${APP_GID} scripts/cisnet_timing.js ./scripts/cisnet_timing.js
 COPY --chown=${APP_UID}:${APP_GID} docker ./docker
 RUN chmod 0755 docker/cisnet-wrapper.py
 ENV PATH=/opt/venv/bin:${PATH} \

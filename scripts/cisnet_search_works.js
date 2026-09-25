@@ -6,6 +6,7 @@
  */
 
 const fs = require('fs');
+const { createTiming } = require('./cisnet_timing');
 const browserAutomationModule = process.env.CISNET_PLAYWRIGHT_MODULE
   || '/opt/cisnet-playwright/node_modules/patchright';
 const { chromium } = require(browserAutomationModule);
@@ -13,6 +14,7 @@ const { chromium } = require(browserAutomationModule);
 const CDP_ENDPOINT = process.env.CISNET_CDP_ENDPOINT || 'http://127.0.0.1:9223';
 const NO_RESULTS = 'No results were found for this request.';
 const LOGIN_TIMEOUT_MS = 60000;
+const { act, enterText } = createTiming();
 
 class AdapterError extends Error {
   constructor(code, message) {
@@ -98,11 +100,12 @@ async function login(page) {
   if (!(await passwordInput.isVisible())) throw new AdapterError('LOGIN_FORM_MISSING', 'CIS-Net login page is not open');
   done();
   begin('login.fill');
-  await emailInput.fill(email);
-  await passwordInput.fill(password);
+  await enterText(emailInput, email);
+  await enterText(passwordInput, password);
   done();
   begin('login.submit');
-  await single(page.getByRole('button', { name: /Sign in/i }), 'Sign in button').then((button) => button.click());
+  const signIn = await single(page.getByRole('button', { name: /Sign in/i }), 'Sign in button');
+  await act(() => signIn.click());
   done();
   begin('login.wait');
   const deadline = Date.now() + LOGIN_TIMEOUT_MS;
@@ -111,7 +114,7 @@ async function login(page) {
     if (await busy.count()) {
       begin('login.busy');
       const no = await single(busy.getByRole('button', { name: 'No', exact: true }), 'busy-session No button');
-      await no.click();
+      await act(() => no.click());
       throw new AdapterError('BUSY_SESSION', 'CIS-Net session is already in use; selected No');
     }
     if (await signedIn(page)) {
@@ -130,13 +133,14 @@ async function logout(page) {
     .filter({ hasText: /Are you really sure\s*\?/ });
   if (!(await confirmationLocator.count())) {
     const account = await single(page.locator('span.v-menubar-menuitem:visible').filter({ hasText: /\(RAO\)/ }), 'account menu');
-    await account.hover();
+    await act(() => account.hover());
     const logoutItem = await single(page.locator('span.v-menubar-menuitem:visible').filter({ hasText: /Logout\s*$/ }), 'Logout menu item');
-    await logoutItem.click();
+    await act(() => logoutItem.click());
   }
   await confirmationLocator.waitFor({ state: 'visible', timeout: 10000 });
   const confirmation = await single(confirmationLocator, 'Logout confirmation');
-  await (await single(confirmation.getByRole('button', { name: 'Yes', exact: true }), 'Logout Yes button')).click();
+  const yes = await single(confirmation.getByRole('button', { name: 'Yes', exact: true }), 'Logout Yes button');
+  await act(() => yes.click());
   await page.locator('input[type="password"]:visible').first().waitFor({ state: 'visible', timeout: LOGIN_TIMEOUT_MS });
 }
 
@@ -151,7 +155,7 @@ async function startSession(page) {
     begin('mwi.open');
     const mwiCaption = await single(page.locator('span.v-menubar-menuitem-caption:visible').filter({ hasText: /^MWI$/ }), 'MWI menu');
     const mwi = mwiCaption.locator('..');
-    await mwi.click();
+    await act(() => mwi.click());
     await page.getByText('MWI > Search works > Search', { exact: true })
       .waitFor({ state: 'visible', timeout: LOGIN_TIMEOUT_MS });
     done();
@@ -171,7 +175,7 @@ async function selectByText(select, text) {
     return option ? { value: option.value, selected: option.selected } : null;
   }, text);
   if (choice === null) throw new Error(`CIS-Net select option is unavailable: ${text}`);
-  if (!choice.selected) await select.selectOption(choice.value);
+  if (!choice.selected) await act(() => select.selectOption(choice.value));
 }
 
 async function capture(page) {
@@ -255,7 +259,7 @@ async function captureAllPages(page) {
       page.locator('.paging-layout .v-button:visible').filter({ hasText: /^\s*\uF105\s*$/ }),
       'next-page button',
     );
-    await next.click();
+    await act(() => next.click());
     await page.waitForFunction(({ expected, previous, noResults }) => {
       if (document.body.innerText.includes(noResults)) return true;
       const labels = [...document.querySelectorAll('.paging-layout .v-label')]
@@ -314,9 +318,9 @@ async function main() {
     if (await selects.nth(3).isEnabled()) await selectByText(selects.nth(3), 'Choose');
     await page.waitForTimeout(300);
     await page.waitForLoadState('networkidle', { timeout: 15000 });
-    await inputs.nth(0).fill(request.iswc);
-    if (await inputs.nth(1).isEnabled()) await inputs.nth(1).fill('');
-    await inputs.nth(0).press('Tab');
+    await enterText(inputs.nth(0), request.iswc);
+    if (await inputs.nth(1).isEnabled()) await enterText(inputs.nth(1), '');
+    await act(() => inputs.nth(0).press('Tab'));
   } else {
     await selectByText(selects.nth(0), 'Title');
     await selectByText(selects.nth(1), 'Contains');
@@ -324,9 +328,9 @@ async function main() {
     await selectByText(selects.nth(4), 'Contains');
     await page.waitForTimeout(300);
     await page.waitForLoadState('networkidle', { timeout: 15000 });
-    await inputs.nth(0).fill(request.title);
-    await inputs.nth(1).fill(request.performer);
-    await inputs.nth(1).press('Tab');
+    await enterText(inputs.nth(0), request.title);
+    await enterText(inputs.nth(1), request.performer);
+    await act(() => inputs.nth(1).press('Tab'));
   }
   await page.waitForTimeout(300);
   await page.waitForLoadState('networkidle', { timeout: 15000 });
@@ -361,7 +365,7 @@ async function main() {
     };
   }, NO_RESULTS);
   try {
-    await search.click();
+    await act(() => search.click());
     done();
     begin('search.wait_results');
     await waitForResults(resultsWatcher);

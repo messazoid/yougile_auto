@@ -187,6 +187,9 @@ services:
       CISNET_ADAPTER_CWD: /opt/music-verifier
       CISNET_WRAPPER: /opt/music-verifier/docker/cisnet-wrapper.py
       CISNET_INTERVAL_SECONDS: ${CISNET_INTERVAL_SECONDS:-60}
+      CISNET_KEY_DELAY_MS: ${CISNET_KEY_DELAY_MS:-40}
+      CISNET_ACTION_DELAY_MIN_MS: ${CISNET_ACTION_DELAY_MIN_MS:-120}
+      CISNET_ACTION_DELAY_MAX_MS: ${CISNET_ACTION_DELAY_MAX_MS:-280}
       CISNET_EXECUTE: ${CISNET_EXECUTE:-0}
     depends_on:
       init-data:

@@ -81,6 +81,14 @@ packages. WebGL requires a separate choice: Chromium documents its software
 fallback as a lower-security option intended for development, so it is not
 enabled for the external CIS-Net page.
 
+The runner controls input pacing with `CISNET_KEY_DELAY_MS` (default `40`,
+range `0..250`) and `CISNET_ACTION_DELAY_MIN_MS` / `CISNET_ACTION_DELAY_MAX_MS`
+(defaults `120` / `280`, each `0..2000`). Text is entered through keyboard events;
+an action pauses for a random duration within the configured range before a
+click, selection, hover, or Tab press. Set all three to `0` for immediate input.
+Page readiness and result waits still depend on observed page state, and these
+settings do not change the runner's `CISNET_INTERVAL_SECONDS` polling interval.
+
 To check the adapter against a local HTML fixture, with no external network,
 credentials, or existing browser profile:
 

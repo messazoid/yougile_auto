@@ -23,6 +23,9 @@ const fixture = String.raw`<!doctype html><html><body>
 <script>
 const app = document.getElementById('app');
 const noResults = 'No results were found for this request.';
+document.addEventListener('keydown', () => {
+  document.body.dataset.keydowns = String(Number(document.body.dataset.keydowns || 0) + 1);
+});
 function login() {
   app.innerHTML = '<input type="text"><input type="password"><button id="login">Sign in</button>';
   document.getElementById('login').onclick = menu;
@@ -97,6 +100,9 @@ test('Patchright CDP adapter: login, repeated search, pagination, empty results,
               CISNET_CDP_ENDPOINT: 'http://127.0.0.1:19223',
               CISNET_EMAIL: 'fixture@example.test',
               CISNET_PASSWORD: 'fixture-only',
+              CISNET_KEY_DELAY_MS: '1',
+              CISNET_ACTION_DELAY_MIN_MS: '0',
+              CISNET_ACTION_DELAY_MAX_MS: '0',
             },
           });
           return result.stdout.trim() ? JSON.parse(result.stdout) : null;
@@ -120,6 +126,7 @@ test('Patchright CDP adapter: login, repeated search, pagination, empty results,
       assert.equal(empty.result_message, 'No results were found for this request.');
       assert.equal(await page.locator('body').getAttribute('data-webdriver'), 'false');
       assert.equal(await page.locator('body').getAttribute('data-own-markers'), '[]');
+      assert.ok(Number(await page.locator('body').getAttribute('data-keydowns')) > 20);
       await run('--finish');
       assert.equal(await page.locator('input[type="password"]').count(), 1);
     } finally {
