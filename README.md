@@ -67,6 +67,9 @@ Patchright does not guarantee that automation cannot be detected.
 The adapter keeps its result observer in a `JSHandle` rather than `window`
 properties, so polling uses the observer's own execution context and does not
 depend on globals being shared between Patchright's isolated contexts.
+For title searches, it removes a trailing `feat` or `feat.` marker and all
+following text before filling CIS-Net's Title field. The Performer field and
+the saved source request are left as supplied; ISWC searches are unaffected.
 
 The browser environment is configurable through the Compose environment file:
 `CISNET_LOCALE` (default `en-US`), `CISNET_TIMEZONE` (default `UTC`),

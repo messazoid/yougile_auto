@@ -34,6 +34,7 @@ WORKDIR /opt/music-verifier
 COPY --chown=${APP_UID}:${APP_GID} src ./src
 COPY --chown=${APP_UID}:${APP_GID} scripts/cisnet_search_works.js ./scripts/cisnet_search_works.js
 COPY --chown=${APP_UID}:${APP_GID} scripts/cisnet_timing.js ./scripts/cisnet_timing.js
+COPY --chown=${APP_UID}:${APP_GID} scripts/cisnet_title.js ./scripts/cisnet_title.js
 COPY --chown=${APP_UID}:${APP_GID} cisnet-playwright/diagnose-live.js cisnet-playwright/diagnose-browsers.js \
     cisnet-playwright/browser-environment.js cisnet-playwright/configure-profile.js ./scripts/
 COPY --chown=${APP_UID}:${APP_GID} docker ./docker

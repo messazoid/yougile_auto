@@ -51,6 +51,9 @@ function searchForm() {
     + select.repeat(6) + '<input type="text"><input type="text">'
     + '<button class="v-button-primary">Search</button><section id="results"></section>';
   document.querySelector('.v-button-primary').onclick = () => {
+    const searchInputs = document.querySelectorAll('#search input[type="text"]');
+    document.body.dataset.searchTitle = searchInputs[0].value;
+    document.body.dataset.searchPerformer = searchInputs[1].value;
     // This executes in the site's main world, independently of evaluate().
     document.body.dataset.ownMarkers = JSON.stringify(
       Object.getOwnPropertyNames(window).filter(x => x.startsWith('__cisnet')));
@@ -118,6 +121,13 @@ test('Patchright CDP adapter: login, repeated search, pagination, empty results,
         assert.deepEqual(result.works.map(work => work.title), ['Work 1', 'Work 2']);
         assert.deepEqual(result.works.map(work => work.position), [1, 2]);
       }
+      const featuringTitle = "i smoked away my brain (i'm god x demons mashup) feat imogen heap & clams casino";
+      const featuringPerformer = 'imogen heap,clams casino';
+      await fs.writeFile(requestPath, JSON.stringify({ title: featuringTitle, performer: featuringPerformer }));
+      assert.equal((await run('--request', requestPath)).works.length, 2);
+      assert.equal(await page.locator('body').getAttribute('data-search-title'),
+        "i smoked away my brain (i'm god x demons mashup)");
+      assert.equal(await page.locator('body').getAttribute('data-search-performer'), featuringPerformer);
       await fs.writeFile(requestPath, JSON.stringify({ title: 'TEST', performer: 'Test Artist', iswc: 'T-123.456.789-0' }));
       assert.equal((await run('--request', requestPath)).works.length, 2);
       await fs.writeFile(requestPath, JSON.stringify({ title: 'EMPTY', performer: 'Test Artist' }));

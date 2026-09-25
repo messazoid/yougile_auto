@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const { createTiming } = require('./cisnet_timing');
+const { titleForSearch } = require('./cisnet_title');
 const browserAutomationModule = process.env.CISNET_PLAYWRIGHT_MODULE
   || '/opt/cisnet-playwright/node_modules/patchright';
 const { chromium } = require(browserAutomationModule);
@@ -301,6 +302,7 @@ async function main() {
   begin('search.request');
   const request = JSON.parse(fs.readFileSync(requestPath, 'utf8'));
   if (!request.title || !request.performer) throw new Error('request must contain title and performer');
+  const searchTitle = titleForSearch(request.title);
   if (!(await signedIn(page))) throw new Error('CIS-Net is not signed in');
   if (await page.locator('.v-window:visible').count()) throw new Error('CIS-Net has a visible modal window; employee action is required');
   done();
@@ -328,7 +330,7 @@ async function main() {
     await selectByText(selects.nth(4), 'Contains');
     await page.waitForTimeout(300);
     await page.waitForLoadState('networkidle', { timeout: 15000 });
-    await enterText(inputs.nth(0), request.title);
+    await enterText(inputs.nth(0), searchTitle);
     await enterText(inputs.nth(1), request.performer);
     await act(() => inputs.nth(1).press('Tab'));
   }
@@ -336,7 +338,7 @@ async function main() {
   await page.waitForLoadState('networkidle', { timeout: 15000 });
   const entered = await page.evaluate(() => [...document.querySelectorAll('input[type="text"]')]
     .slice(0, 2).map((input) => input.value.trim().toUpperCase()));
-  if (entered[0] !== (request.iswc || request.title).trim().toUpperCase()
+  if (entered[0] !== (request.iswc || searchTitle).trim().toUpperCase()
     || (!request.iswc && entered[1] !== request.performer.trim().toUpperCase())) {
     throw new Error('CIS-Net search fields changed before submission');
   }
