@@ -68,6 +68,19 @@ The adapter keeps its result observer in a `JSHandle` rather than `window`
 properties, so polling uses the observer's own execution context and does not
 depend on globals being shared between Patchright's isolated contexts.
 
+The browser environment is configurable through the Compose environment file:
+`CISNET_LOCALE` (default `en-US`), `CISNET_TIMEZONE` (default `UTC`),
+`CISNET_SCREEN_WIDTH` (default `1300`), and `CISNET_SCREEN_HEIGHT` (default
+`1080`). The locale sets the browser's language and `Accept-Language`; the
+timezone is applied both to Chromium and the container's `TZ`. The screen
+dimensions control Xvfb's 24-bit display; Chromium decides the window's own
+size. The launcher and the display script validate these values at startup.
+The defaults retain the previously observed environment. The image already
+contains Liberation fonts and Noto Color Emoji, so this change adds no font
+packages. WebGL requires a separate choice: Chromium documents its software
+fallback as a lower-security option intended for development, so it is not
+enabled for the external CIS-Net page.
+
 To check the adapter against a local HTML fixture, with no external network,
 credentials, or existing browser profile:
 
@@ -94,4 +107,46 @@ and recreate both CIS-Net services. Retain the existing profile volume:
 docker compose --env-file /etc/music-verifier.env build cisnet-browser cisnet-runner
 docker compose --env-file /etc/music-verifier.env stop cisnet-runner
 docker compose --env-file /etc/music-verifier.env up -d --no-deps --wait cisnet-browser cisnet-runner
+```
+
+### Compare Chromium and Google Chrome locally
+
+The optional diagnostic image adds Google Chrome alongside the bundled Chromium.
+It does not replace the running CIS-Net image or use its profile. Chrome Stable
+is installed at image build time; its actual version is recorded in the report.
+Both browsers are launched sequentially with fresh profiles, the existing
+profile preferences, a visible window, `viewport: null`, and the configured
+locale, timezone, and screen dimensions.
+
+```bash
+docker build -f cisnet-playwright/Dockerfile.diagnostics \
+  -t cisnet-diagnostics:local cisnet-playwright
+mkdir -p tmp/browser-diagnostics
+docker run --rm --network none --read-only \
+  --tmpfs /tmp:size=512m,mode=1777 --shm-size=1g \
+  --tmpfs /var/lib/cisnet-playwright:uid=1001,gid=1001,mode=0700 \
+  cisnet-diagnostics:local > tmp/browser-diagnostics/comparison.json
+```
+
+The probe runs as JavaScript served by a loopback HTTP server, so it measures the
+page's own environment rather than Patchright's isolated execution world. The
+JSON includes navigator properties, Client Hints, selected request headers,
+screen/window sizes, Canvas hash, WebGL renderer, media codecs, a same-origin
+iframe, and a limited scan for global automation markers. Snapshots are compared
+on repeat and after attaching a separate Patchright CDP runner.
+
+The report is a local measurement, not a guarantee of invisibility: there is no
+manual-browser control, external site classifier, TLS fingerprint, or IP
+reputation test. Browser versions can differ. Generated reports stay in the
+Git-ignored `tmp/` directory.
+
+To verify the actual adapter with Chrome against the offline fixture:
+
+```bash
+docker run --rm --network none --read-only \
+  --tmpfs /tmp:size=512m,mode=1777 --shm-size=1g \
+  --tmpfs /var/lib/cisnet-playwright:uid=1001,gid=1001,mode=0700 \
+  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+  -e CISNET_TEST_BROWSER_CHANNEL=chrome \
+  cisnet-diagnostics:local node --test /workspace/tests/cisnet_adapter_smoke.cjs
 ```

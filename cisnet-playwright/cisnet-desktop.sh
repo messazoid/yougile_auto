@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
+source /opt/cisnet-playwright/screen-size.sh
 
 export HOME="${HOME:-/var/lib/cisnet-playwright}"
 export DISPLAY="${DISPLAY:-:99}"
@@ -35,8 +36,9 @@ terminate() {
 trap cleanup EXIT
 trap terminate INT TERM
 
+cisnet_screen_geometry_value="$(cisnet_screen_geometry)"
 /usr/bin/Xvfb "$DISPLAY" \
-  -screen 0 1300x1080x24 \
+  -screen 0 "$cisnet_screen_geometry_value" \
   -nolisten tcp &
 
 XVFB_PID=$!

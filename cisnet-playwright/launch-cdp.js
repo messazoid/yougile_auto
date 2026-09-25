@@ -2,6 +2,7 @@
 
 const { chromium } = require('patchright');
 const { configureProfile } = require('./configure-profile');
+const { readBrowserEnvironment } = require('./browser-environment');
 
 const CDP_PORT = Number.parseInt(process.env.CISNET_CDP_PORT || '9223', 10);
 const CDP_ADDRESS = process.env.CISNET_CDP_BIND_ADDRESS || '127.0.0.1';
@@ -13,21 +14,23 @@ if (!Number.isInteger(CDP_PORT) || CDP_PORT < 1 || CDP_PORT > 65535) {
 
 async function main() {
   let closing = false;
+  const environment = readBrowserEnvironment();
   configureProfile(USER_DATA_DIR);
   const context = await chromium.launchPersistentContext(
     USER_DATA_DIR,
     {
-    headless: false,
-    viewport: null,
-    locale: 'en-US',
-    args: [
-      `--remote-debugging-address=${CDP_ADDRESS}`,
-      `--remote-debugging-port=${CDP_PORT}`,
-      '--hide-crash-restore-bubble',
-      '--disable-save-password-bubble',
-      '--no-default-browser-check',
-      '--no-first-run',
-    ],
+      headless: false,
+      viewport: null,
+      locale: environment.locale,
+      timezoneId: environment.timezoneId,
+      args: [
+        `--remote-debugging-address=${CDP_ADDRESS}`,
+        `--remote-debugging-port=${CDP_PORT}`,
+        '--hide-crash-restore-bubble',
+        '--disable-save-password-bubble',
+        '--no-default-browser-check',
+        '--no-first-run',
+      ],
     },
   );
   const page = context.pages()[0] || await context.newPage();

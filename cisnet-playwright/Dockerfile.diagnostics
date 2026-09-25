@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1.7
+
+# A separate image keeps the optional Chrome comparison out of the CIS-Net
+# runtime and leaves its existing browser/profile untouched.
+ARG CISNET_BASE_IMAGE=cisnet-playwright:local
+FROM ${CISNET_BASE_IMAGE}
+USER root
+RUN npx --no-install patchright install chrome \
+    && rm -rf /var/lib/apt/lists/*
+COPY diagnose-browsers.js start-diagnostics.sh /opt/cisnet-playwright/
+RUN chmod 0755 /opt/cisnet-playwright/start-diagnostics.sh
+USER pwuser
+HEALTHCHECK NONE
+ENTRYPOINT ["/usr/bin/tini", "--", "/opt/cisnet-playwright/start-diagnostics.sh"]
+CMD ["node", "/opt/cisnet-playwright/diagnose-browsers.js"]

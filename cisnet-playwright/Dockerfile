@@ -14,7 +14,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts \
     && npx --no-install patchright install chromium --no-shell \
     && npm cache clean --force
-COPY launch-cdp.js configure-profile.js cisnet-desktop.sh container-entrypoint.sh container-healthcheck.sh ./
+COPY launch-cdp.js configure-profile.js browser-environment.js screen-size.sh cisnet-desktop.sh container-entrypoint.sh container-healthcheck.sh ./
 RUN install -d -o pwuser -g pwuser -m 0700 \
         /var/lib/cisnet-playwright /var/lib/cisnet-playwright/.vnc \
         /var/lib/cisnet-playwright/cdp-profile \
@@ -23,6 +23,11 @@ RUN install -d -o pwuser -g pwuser -m 0700 \
 
 ENV HOME=/var/lib/cisnet-playwright \
     DISPLAY=:99 \
+    TZ=UTC \
+    CISNET_LOCALE=en-US \
+    CISNET_TIMEZONE=UTC \
+    CISNET_SCREEN_WIDTH=1300 \
+    CISNET_SCREEN_HEIGHT=1080 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     CISNET_CDP_BIND_ADDRESS=127.0.0.1 \
     CISNET_CDP_PORT=9223 \

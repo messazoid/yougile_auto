@@ -13,6 +13,10 @@ const driver = process.env.CISNET_PLAYWRIGHT_MODULE
   || '/opt/cisnet-playwright/node_modules/patchright';
 const { chromium } = require(driver);
 const exec = promisify(execFile);
+const browserChannel = process.env.CISNET_TEST_BROWSER_CHANNEL || 'chromium';
+if (!['chromium', 'chrome'].includes(browserChannel)) {
+  throw new Error('CISNET_TEST_BROWSER_CHANNEL must be chromium or chrome');
+}
 
 const fixture = String.raw`<!doctype html><html><body>
 <main id="app"></main>
@@ -72,6 +76,7 @@ test('Patchright CDP adapter: login, repeated search, pagination, empty results,
     let context;
     try {
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), {
+        ...(browserChannel === 'chrome' ? { channel: 'chrome' } : {}),
         headless: false,
         viewport: null,
         locale: 'en-US',
