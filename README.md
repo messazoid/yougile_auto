@@ -20,7 +20,7 @@ Music Verifier обрабатывает аудио и видео из YouGile, �
 1. Склонируйте проект с GitHub и перейдите в его каталог:
 
    ```bash
-   git clone git@github.com:messazoid/yougile_auto.git
+   git clone https://github.com/messazoid/yougile_auto.git
    cd yougile_auto
    ```
 
