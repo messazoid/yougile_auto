@@ -35,7 +35,7 @@ from .production_adapter import (
     load_production_run,
     serialize_canonical_run,
 )
-from .export import export_completed_aggregation_run
+from .export import COUNTED, export_completed_aggregation_run
 
 if TYPE_CHECKING:
     from job_store import PipelineStore
@@ -150,6 +150,9 @@ def execute_claimed_aggregation_run(store: "PipelineStore", claimed: dict) -> st
     digest = store.complete_aggregation_run(claimed["id"], claimed["lease_token"], result_json)
     try:
         export_directory = export_completed_aggregation_run(store, claimed["id"])
+        exported = json.loads((export_directory / "result.json").read_text(encoding="utf-8"))
+        if not any(item.get("count_status") == COUNTED for item in exported):
+            return digest
         for link in store.links_for_recognition(claimed["recognition_id"]):
             chat_id = link.get("chat_id")
             if not chat_id:

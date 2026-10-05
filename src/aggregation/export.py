@@ -16,8 +16,12 @@ if TYPE_CHECKING:
     from job_store import PipelineStore
 
 
-EXPORT_CONTRACT_VERSION = "aggregation-files/v3"
+EXPORT_CONTRACT_VERSION = "aggregation-files/v4"
 _REQUIRED_FILES = ("result.json", "summary.json", "summary.md", "manifest.json")
+MIN_COUNTED_DURATION_SECONDS = 10.0
+COUNTED = "counted"
+NOT_COUNTED_SHORT = "not_counted_short_duration"
+NOT_COUNTED_UNAVAILABLE = "not_counted_duration_unavailable"
 
 
 class AggregationExportError(RuntimeError):
@@ -90,6 +94,49 @@ def _input_candidates(canonical_input: dict[str, Any]) -> dict[str, dict[str, An
     return candidates
 
 
+def duration_decisions(result: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Assess total observed time per track family without double-counting overlaps.
+
+    The aggregation's observed ranges are estimates, not exact music boundaries.
+    Missing or invalid ranges cannot establish a qualifying duration.
+    """
+    intervals: dict[str, list[tuple[float, float]]] = {}
+    invalid: set[str] = set()
+    for appearance in result.get("appearances", []):
+        if not isinstance(appearance, dict):
+            continue
+        family_id = appearance.get("family_id")
+        if not isinstance(family_id, str) or not family_id:
+            continue
+        observed = appearance.get("observed_range")
+        start = observed.get("start") if isinstance(observed, dict) else None
+        end = observed.get("end") if isinstance(observed, dict) else None
+        if (not isinstance(start, (int, float)) or isinstance(start, bool)
+                or not isinstance(end, (int, float)) or isinstance(end, bool)
+                or not (float("-inf") < start < end < float("inf"))):
+            invalid.add(family_id)
+            continue
+        intervals.setdefault(family_id, []).append((float(start), float(end)))
+
+    decisions = {}
+    for family_id in intervals.keys() | invalid:
+        if family_id in invalid:
+            decisions[family_id] = {"count_status": NOT_COUNTED_UNAVAILABLE, "total_duration_seconds": None}
+            continue
+        merged: list[list[float]] = []
+        for start, end in sorted(intervals[family_id]):
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        duration = sum(end - start for start, end in merged)
+        decisions[family_id] = {
+            "count_status": COUNTED if duration > MIN_COUNTED_DURATION_SECONDS + 1e-6 else NOT_COUNTED_SHORT,
+            "total_duration_seconds": duration,
+        }
+    return decisions
+
+
 def build_public_result(result: dict[str, Any], canonical_input: dict[str, Any]) -> list[dict[str, Any]]:
     """Return the intentionally minimal result.json projection.
 
@@ -98,6 +145,7 @@ def build_public_result(result: dict[str, Any], canonical_input: dict[str, Any])
     the export preserves ACRCloud spelling and does not infer a work identity.
     """
     candidates = _input_candidates(canonical_input)
+    decisions = duration_decisions(result)
     public: list[dict[str, Any]] = []
     for appearance in result.get("appearances", []):
         if not isinstance(appearance, dict):
@@ -129,6 +177,11 @@ def build_public_result(result: dict[str, Any], canonical_input: dict[str, Any])
             "period": {"start": observed.get("start"), "end": observed.get("end")},
             "title": title,
             "artist": artist,
+            "family_id": appearance.get("family_id"),
+            **decisions.get(appearance.get("family_id"), {
+                "count_status": NOT_COUNTED_UNAVAILABLE,
+                "total_duration_seconds": None,
+            }),
         }
         if iswcs:
             item["iswc"] = iswcs
@@ -207,6 +260,7 @@ def _candidate_tracks(
 def build_summary(result: dict[str, Any], recognition_id: int, aggregation_run_id: int) -> dict[str, Any]:
     """Build a compact, non-decisional projection of an AggregatedResult."""
     families = _family_by_id(result)
+    decisions = duration_decisions(result)
     appearances = []
     for appearance in result.get("appearances", []):
         if not isinstance(appearance, dict):
@@ -223,6 +277,10 @@ def build_summary(result: dict[str, Any], recognition_id: int, aggregation_run_i
             "artists": family.get("artists", []),
             "supports": len(appearance.get("supporting_observation_ids", [])),
             "family_id": appearance.get("family_id"),
+            **decisions.get(appearance.get("family_id"), {
+                "count_status": NOT_COUNTED_UNAVAILABLE,
+                "total_duration_seconds": None,
+            }),
             "recording_identity_ids": appearance.get("member_recording_identity_ids", []),
             "preferred_recording_identity_id": appearance.get("preferred_recording_identity_id"),
             "gaps": [
@@ -240,6 +298,7 @@ def build_summary(result: dict[str, Any], recognition_id: int, aggregation_run_i
         "aggregation_run_id": aggregation_run_id,
         "families_count": len(result.get("track_families", [])),
         "appearances_count": len(appearances),
+        "counted_appearances_count": sum(item["count_status"] == COUNTED for item in appearances),
         "transitions_count": len(result.get("transitions", [])),
         "conflicts_count": len(result.get("conflicts", [])),
         "observations_count": len(catalog.get("observations", [])),
@@ -255,15 +314,15 @@ def _markdown_cell(value: Any) -> str:
 
 
 def build_summary_markdown(summary: dict[str, Any]) -> str:
-    """Render a stable human-readable report without raw candidate payloads."""
+    """Render only counted tracks for delivery to YouGile."""
+    counted = [item for item in summary["appearances"] if item.get("count_status") == COUNTED]
+    counted_families = {item["family_id"] for item in counted if item.get("family_id")}
     lines = [
         "# Aggregation report",
         "",
         f"- Recognition: `{summary['recognition_id']}`",
         f"- Aggregation run: `{summary['aggregation_run_id']}`",
-        f"- Families: {summary['families_count']}; appearances: {summary['appearances_count']}; "
-        f"transitions: {summary['transitions_count']}; conflicts: {summary['conflicts_count']}; "
-        f"observations: {summary['observations_count']}",
+        f"- Counted appearances: {len(counted)}",
         "",
         "## Appearances",
         "",
@@ -271,7 +330,7 @@ def build_summary_markdown(summary: dict[str, Any]) -> str:
         "| --- | --- | --- | ---: |",
     ]
     notes = []
-    for item in summary["appearances"]:
+    for item in counted:
         artists = ", ".join(str(value) for value in item["artists"]) or "—"
         lines.append(
             f"| {_markdown_cell(item['start'])}–{_markdown_cell(item['end'])} | "
@@ -293,15 +352,16 @@ def build_summary_markdown(summary: dict[str, Any]) -> str:
         lines.extend(["", "## Notes", "", *notes])
     lines.extend([
         "",
-        "## All ACRCloud candidate families (single recognition pass)",
+        "## ACRCloud candidate families for counted appearances",
         "",
-        "This section preserves every candidate family returned by the same ACRCloud pass. "
         "Possible tracks are evidence, not verified final results.",
         "",
         "| Time, s | Status | Title | Artist | Versions | Best rank | Windows |",
         "| --- | --- | --- | --- | --- | ---: | ---: |",
     ])
     for item in summary.get("candidate_tracks", []):
+        if item.get("family_id") not in counted_families:
+            continue
         artists = ", ".join(str(value) for value in item.get("artists", [])) or "—"
         versions = ", ".join(str(value) for value in item.get("version_signatures", []))
         if not versions:

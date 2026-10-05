@@ -203,6 +203,8 @@ def requests_from_aggregation(data_root: Path, run_name: str, positions: list[in
         record = records[position - 1]
         if not isinstance(record, dict):
             raise CisnetCommandError(f"candidate {position} is not an object")
+        if record.get("count_status") != "counted":
+            continue
         title = _normalise_text(str(record.get("title") or ""), f"candidate {position} title")
         artists = record.get("artist")
         if isinstance(artists, list):

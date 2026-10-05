@@ -543,6 +543,11 @@ class RunConsole:
                         iswcs = [iswcs]
                     iswc_text = ", ".join(str(value) for value in iswcs if value) if isinstance(iswcs, list) else ""
                     details = (f" — {artists_text}" if artists_text else "") + (f"; ISWC: {iswc_text}" if iswc_text else "")
+                    if item.get("count_status") == "not_counted_short_duration":
+                        total = item.get("total_duration_seconds")
+                        details += f"; не засчитано (суммарно {total:.1f} с)" if isinstance(total, (int, float)) else "; не засчитано"
+                    elif item.get("count_status") == "not_counted_duration_unavailable":
+                        details += "; не засчитано (длительность неизвестна)"
                     print(
                         f"  {number}: {_display_period(period)} "
                         f"{item.get('title') or 'untitled'}{details}"

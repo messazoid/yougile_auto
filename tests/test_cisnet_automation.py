@@ -65,7 +65,9 @@ class CisnetAutomationTests(unittest.TestCase):
     def _export(self, run_name, records):
         destination = self.root / "aggregation" / run_name
         destination.mkdir(parents=True)
-        (destination / "result.json").write_text(json.dumps(records))
+        (destination / "result.json").write_text(json.dumps([
+            {"count_status": "counted", **record} for record in records
+        ]))
 
     def _result(self, run_name, request, works):
         destination = self.root / "cisnet" / f"{run_name}_CISNET" / _query_key(request)
@@ -112,6 +114,20 @@ class CisnetAutomationTests(unittest.TestCase):
             run.assert_not_called()
         self.assertEqual([row["aggregation_run_id"] for row in self._db_rows("cisnet_runs")], [2])
         self.assertEqual(self._db_rows("cisnet_runs")[0]["state"], "empty")
+
+    def test_short_only_run_does_not_open_cisnet_or_queue_results(self):
+        self._complete()
+        self._link_chat(2, "chat-short", "short")
+        self._export("2_2", [{
+            "title": "Short Song", "artist": ["Artist"],
+            "count_status": "not_counted_short_duration", "total_duration_seconds": 10.0,
+        }])
+        with patch("cisnet_automation._run_wrapper") as run:
+            self.assertEqual(run_pending(self.db_path, self.root), 0)
+            run.assert_not_called()
+        self.assertEqual(self._db_rows("cisnet_runs")[0]["state"], "empty")
+        self.assertEqual(self._db_rows("cisnet_searches"), [])
+        self.assertEqual(self._db_rows("chat_notifications"), [])
 
     def test_first_available_iswc_and_no_duplicate_message_lines(self):
         self._complete()

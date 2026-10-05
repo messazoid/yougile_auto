@@ -351,7 +351,9 @@ class ProductionAdapterTests(unittest.TestCase):
             result,
             aggregation_export.build_public_result(stored_result, json.loads(input_row["canonical_json"])),
         )
-        self.assertTrue(all(set(item) <= {"period", "title", "artist", "iswc"} for item in result))
+        self.assertTrue(all(set(item) <= {
+            "period", "title", "artist", "iswc", "family_id", "count_status", "total_duration_seconds"
+        } for item in result))
         self.assertTrue(all(set(item["period"]) == {"start", "end"} for item in result))
         self.assertEqual(
             (summary["recognition_id"], summary["aggregation_run_id"]),
@@ -367,7 +369,7 @@ class ProductionAdapterTests(unittest.TestCase):
             [item["start"] for item in summary["appearances"]],
             [item["observed_range"]["start"] for item in stored_result["appearances"]],
         )
-        self.assertEqual(summary["summary_contract_version"], "aggregation-files/v3")
+        self.assertEqual(summary["summary_contract_version"], "aggregation-files/v4")
         self.assertEqual(summary["candidate_tracks_count"], len(stored_result["track_families"]))
         self.assertEqual(
             {item["family_id"] for item in summary["candidate_tracks"]},
@@ -411,8 +413,8 @@ class ProductionAdapterTests(unittest.TestCase):
         self.assertEqual(before, {path.name: path.read_bytes() for path in destination.iterdir()})
         markdown = (destination / "summary.md").read_text(encoding="utf-8")
         self.assertIn("# Aggregation report", markdown)
-        self.assertIn("## All ACRCloud candidate families (single recognition pass)", markdown)
-        self.assertIn("possible_secondary", markdown)
+        self.assertIn("## ACRCloud candidate families for counted appearances", markdown)
+        self.assertIn("Counted appearances:", markdown)
         self.assertNotIn('"raw_values"', markdown)
 
     def test_public_result_uses_supporting_acrcloud_metadata_and_optional_iswc(self):
@@ -421,7 +423,7 @@ class ProductionAdapterTests(unittest.TestCase):
             aggregate_result(run).to_dict(), json.loads(serialize_canonical_run(run)),
         )
         love_and_happiness = next(item for item in public if item["title"] == "Love and Happiness")
-        self.assertEqual(love_and_happiness, {
+        self.assertEqual({key: love_and_happiness[key] for key in ("period", "title", "artist", "iswc")}, {
             "period": {"start": 240.0, "end": 292.0},
             "title": "Love and Happiness",
             "artist": ["Al Green"],
@@ -447,7 +449,7 @@ class ProductionAdapterTests(unittest.TestCase):
         result = json.loads((destination / "result.json").read_text(encoding="utf-8"))
         self.assertIsInstance(result, list)
         manifest = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["export_contract_version"], "aggregation-files/v3")
+        self.assertEqual(manifest["export_contract_version"], "aggregation-files/v4")
         self.assertEqual(
             list(destination.parent.glob(f".{destination.name}.previous-*")),
             [],

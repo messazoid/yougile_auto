@@ -164,6 +164,20 @@ class YougileRunsTests(unittest.TestCase):
         self.assertIn("12.0–34.0 (22.0 s) Example title — Example artist; ISWC: T1234567890", text)
         self.assertIn("40.0–50.0 (10.0 s) No ISWC", text)
 
+    def test_view_aggregation_marks_short_track_as_not_counted(self):
+        (self.export / "result.json").write_text(json.dumps([{
+            "period": {"start": 40, "end": 50},
+            "title": "Short song",
+            "artist": ["Artist"],
+            "count_status": "not_counted_short_duration",
+            "total_duration_seconds": 10.0,
+        }]) + "\n", encoding="utf-8")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.console.view(1, "aggregation")
+        self.assertIn("Short song", output.getvalue())
+        self.assertIn("не засчитано (суммарно 10.0 с)", output.getvalue())
+
     def test_view_without_a_limit_includes_every_response_row(self):
         (self.result_dir / "responses.jsonl").write_text(
             "\n".join(

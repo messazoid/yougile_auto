@@ -22,8 +22,8 @@ class CisnetCliTests(unittest.TestCase):
         directory = self.root / "aggregation" / "1_1"
         directory.mkdir(parents=True)
         (directory / "result.json").write_text(json.dumps([
-            {"title": "Example", "artist": ["Artist"], "period": {"start": 1, "end": 2}},
-            {"title": "Second", "artist": ["Other"]},
+            {"title": "Example", "artist": ["Artist"], "period": {"start": 1, "end": 2}, "count_status": "counted"},
+            {"title": "Second", "artist": ["Other"], "count_status": "counted"},
         ]), encoding="utf-8")
 
     def test_playwright_log_filter_rejects_unstructured_and_private_text(self):
@@ -99,6 +99,39 @@ class CisnetCliTests(unittest.TestCase):
     def test_all_selects_every_aggregation_candidate(self):
         requests = requests_from_aggregation(self.root, "1_1", _parse_positions("all"))
         self.assertEqual([request.title for request in requests], ["Example", "Second"])
+
+    def test_short_aggregation_candidate_is_not_sent_to_cisnet(self):
+        result_path = self.root / "aggregation" / "1_1" / "result.json"
+        records = json.loads(result_path.read_text())
+        records[0]["count_status"] = "not_counted_short_duration"
+        records[0]["total_duration_seconds"] = 10.0
+        records[1]["count_status"] = "counted"
+        records[1]["total_duration_seconds"] = 12.0
+        result_path.write_text(json.dumps(records))
+        self.assertEqual(
+            [request.title for request in requests_from_aggregation(self.root, "1_1", None)],
+            ["Second"],
+        )
+        self.assertEqual(requests_from_aggregation(self.root, "1_1", [1]), [])
+
+    def test_all_short_aggregation_candidates_produce_no_cisnet_requests(self):
+        result_path = self.root / "aggregation" / "1_1" / "result.json"
+        records = json.loads(result_path.read_text())
+        for record in records:
+            record["count_status"] = "not_counted_short_duration"
+            record["total_duration_seconds"] = 10.0
+        result_path.write_text(json.dumps(records))
+        self.assertEqual(requests_from_aggregation(self.root, "1_1", None), [])
+
+    def test_legacy_candidate_without_count_status_is_not_sent(self):
+        result_path = self.root / "aggregation" / "1_1" / "result.json"
+        records = json.loads(result_path.read_text())
+        records[0].pop("count_status")
+        result_path.write_text(json.dumps(records))
+        self.assertEqual(
+            [request.title for request in requests_from_aggregation(self.root, "1_1", None)],
+            ["Second"],
+        )
 
     def test_aggregation_iswc_is_used_only_when_valid(self):
         result_path = self.root / "aggregation" / "1_1" / "result.json"
@@ -248,7 +281,7 @@ class CisnetCliTests(unittest.TestCase):
 
     def test_rejects_missing_performer_from_public_result(self):
         directory = self.root / "aggregation" / "1_1"
-        (directory / "result.json").write_text(json.dumps([{"title": "Example", "artist": []}]))
+        (directory / "result.json").write_text(json.dumps([{"title": "Example", "artist": [], "count_status": "counted"}]))
         with self.assertRaises(CisnetCommandError):
             requests_from_aggregation(self.root, "1_1", [1])
 
